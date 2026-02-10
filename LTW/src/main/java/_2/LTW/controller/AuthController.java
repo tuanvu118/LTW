@@ -31,6 +31,7 @@ public class AuthController {
             .username(user.getUsername())
             .email(user.getEmail())
             .role(user.getRole())
+            .imageUrl(user.getImageUrl())
             .createdAt(user.getCreatedAt())
             .isDeleted(user.getIsDeleted())
             .build();

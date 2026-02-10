@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/roles").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/roles").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/users/all").hasAuthority("ROLE_ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

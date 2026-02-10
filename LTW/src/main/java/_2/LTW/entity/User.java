@@ -30,6 +30,9 @@ public class User {
     @Column(name = "email", nullable = true, unique = true)
     private String email;
 
+    @Column(name = "image_url", nullable = true)
+    private String imageUrl;
+
     @ManyToOne
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;

@@ -2,6 +2,7 @@ package _2.LTW.service;
 
 import _2.LTW.dto.response.UserResponse;
 import _2.LTW.entity.User;
+import _2.LTW.mapper.UserMapper;
 import _2.LTW.repository.UserRepository;
 import _2.LTW.dto.request.UserRequest;
 import _2.LTW.validate.EmailValidate;
@@ -9,7 +10,6 @@ import _2.LTW.util.SecurityUtil;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Getter
@@ -23,19 +23,11 @@ public class UserService {
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
     private final SecurityUtil securityUtil;
+    private final UserMapper userMapper;
 
     public List<UserResponse> getAllUser() {
         List<User> users = userRepository.findAll();
-        return users.stream()
-                .map(user -> UserResponse.builder()
-                    .id(user.getId())
-                    .username(user.getUsername())
-                    .email(user.getEmail())
-                    .role(user.getRole())
-                    .createdAt(user.getCreatedAt())
-                    .isDeleted(user.getIsDeleted())
-                    .build())
-                .collect(Collectors.toList());
+        return userMapper.toUserResponses(users);
     }
 
     public UserResponse updateUser(Long id, UserRequest userRequest) {
@@ -44,22 +36,17 @@ public class UserService {
         }
 
         User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
-        user.setEmail(userRequest.getEmail());
+
         if (!EmailValidate.isValid(userRequest.getEmail())) {
             throw new RuntimeException("Email không hợp lệ");
         }
+        user.setEmail(userRequest.getEmail());
+
         if (userRequest.getImageUrl() != null) {
             user.setImageUrl(cloudinaryService.upload(userRequest.getImageUrl()).get("url").toString());
         }
         userRepository.save(user);
-        return UserResponse.builder()
-            .id(user.getId())  
-            .username(user.getUsername())
-            .role(user.getRole())
-            .email(user.getEmail())
-            .imageUrl(user.getImageUrl())
-            .createdAt(user.getCreatedAt())
-            .isDeleted(user.getIsDeleted())
-            .build();
+
+        return userMapper.toUserResponse(user);
     }
 }

@@ -5,6 +5,7 @@ import _2.LTW.dto.request.LoginRequest;
 import _2.LTW.dto.response.LoginResponse;
 import _2.LTW.dto.response.UserResponse;
 import _2.LTW.entity.User;
+import _2.LTW.mapper.UserMapper;
 import _2.LTW.repository.UserRepository;
 import _2.LTW.repository.RoleRepository;
 import _2.LTW.util.JwtUtil;
@@ -30,6 +31,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserMapper userMapper;
 
     public User register(RegisterRequest userRequest) {
         if (userRepository.findByUsername(userRequest.getUsername()).isPresent()) {
@@ -69,17 +71,12 @@ public class AuthService {
         String roleName = user.getRole() != null ? user.getRole().getName() : "user";
         
         String token = jwtUtil.generateToken(user.getUsername(), user.getId(), roleName);
-        
+
+        UserResponse userResponse = userMapper.toUserResponse(user);
+
         return LoginResponse.builder()
             .token(token)
-            .userResponse(UserResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .createdAt(user.getCreatedAt())
-                .isDeleted(user.getIsDeleted())
-                .build())
+            .userResponse(userResponse)
             .build();
     }
 }

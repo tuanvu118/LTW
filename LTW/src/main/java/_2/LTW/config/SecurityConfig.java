@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -24,8 +25,17 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+    private static final String[] POST_PUBLIC_ENDPOINT = {
+            "/auth/register", "/auth/login"
+    };
+
+    private static final String[] GET_PUBLIC_ENDPOINT = {
+            "/medical-services", "/medical-services/{id}"
+    };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
@@ -38,11 +48,13 @@ public class SecurityConfig {
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Stateless session
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.POST, POST_PUBLIC_ENDPOINT).permitAll()
+                .requestMatchers(HttpMethod.GET, GET_PUBLIC_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/roles").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/roles").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/users/all").hasAuthority("ROLE_ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
-                .anyRequest().permitAll()
+//                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
+                .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(exceptions -> exceptions

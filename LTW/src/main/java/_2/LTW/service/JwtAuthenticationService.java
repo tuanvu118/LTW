@@ -2,6 +2,7 @@ package _2.LTW.service;
 
 import _2.LTW.entity.User;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.util.CustomPrincipal;
 import _2.LTW.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -141,16 +142,18 @@ public class JwtAuthenticationService {
      * @return UsernamePasswordAuthenticationToken object
      */
     public UsernamePasswordAuthenticationToken createAuthentication(
+            Long userId,
             String username, 
             String roleName, 
             HttpServletRequest request) {
-        
+
+        CustomPrincipal principal = new CustomPrincipal(userId, username, roleName);
         String authorityString = convertRoleToAuthority(roleName);
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority(authorityString);
         
         UsernamePasswordAuthenticationToken authentication = 
             new UsernamePasswordAuthenticationToken(
-                username, 
+                principal,
                 null,
                 Collections.singletonList(authority)
             );
@@ -224,6 +227,8 @@ public class JwtAuthenticationService {
                 return false;
             }
 
+            Long userId = getUserIdFromToken(token);
+
             String username = getUsernameFromToken(token);
             log.debug("Username từ token: {}", username);
 
@@ -231,7 +236,7 @@ public class JwtAuthenticationService {
             log.debug("Role từ token/database: {}", roleName);
 
             UsernamePasswordAuthenticationToken authentication = 
-                createAuthentication(username, roleName, request);
+                createAuthentication(userId, username, roleName, request);
             setSecurityContext(authentication);
 
             log.info("✅ Đã xác thực user: {} với role: {}, authority: {} cho request: {}", 

@@ -3,6 +3,7 @@ package _2.LTW.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import java.util.function.Function;
  * Utility class để xử lý JWT token
  */
 @Component
+@Slf4j
 public class JwtUtil {
 
     @Value("${jwt.secret}")
@@ -116,14 +118,7 @@ public class JwtUtil {
      * Lấy user ID từ token
      */
     public Long getUserIdFromToken(String token) {
-        Object userIdObj = getClaimFromToken(token, claims -> claims.get("userId"));
-        if (userIdObj == null) {
-            return null;
-        }
-        if (userIdObj instanceof Long) {
-            return (Long) userIdObj;
-        }
-        return null;
+        return getClaimFromToken(token, claims -> claims.get("userId", Long.class));
     }
 
     /**

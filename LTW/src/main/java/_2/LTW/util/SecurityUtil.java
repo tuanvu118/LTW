@@ -57,6 +57,10 @@ public class SecurityUtil {
         return getCurrentUserId().equals(userId);
     }
 
+    public boolean isUser() {
+        return getCurrentRole().equals("user");
+    }
+
     public boolean isAdmin() {
         return getCurrentRole().equals("admin");
     }

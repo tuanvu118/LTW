@@ -12,6 +12,7 @@ import _2.LTW.util.JwtUtil;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.validate.EmailValidate;
 import _2.LTW.exception.AppException;
+import _2.LTW.enums.RoleEnum;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -51,7 +52,7 @@ public class AuthService {
         String hashedPassword = passwordEncoder.encode(userRequest.getPassword());
         user.setPassword(hashedPassword);
         user.setEmail(userRequest.getEmail());
-        user.setRole(roleRepository.findByName("user").orElseThrow(() -> ErrorCode.ROLE_NOT_FOUND.toException()));
+        user.setRole(roleRepository.findByRoleEnum(RoleEnum.USER).orElseThrow(() -> ErrorCode.ROLE_NOT_FOUND.toException()));
         user.setCreatedAt(LocalDateTime.now());
         userRepository.save(user);
         return user;
@@ -68,7 +69,8 @@ public class AuthService {
             throw ErrorCode.INVALID_CREDENTIALS.toException();
         }
         
-        String roleName = user.getRole() != null ? user.getRole().getName() : "user";
+        String roleName = user.getRole() != null && user.getRole().getRoleEnum() != null
+                ? user.getRole().getRoleEnum().name() : "USER";
         
         String token = jwtUtil.generateToken(user.getUsername(), user.getId(), roleName);
 

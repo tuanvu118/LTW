@@ -4,6 +4,7 @@ import _2.LTW.entity.Role;
 import _2.LTW.entity.User;
 import _2.LTW.repository.RoleRepository;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.enums.RoleEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -43,19 +44,20 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Đang kiểm tra và khởi tạo các role cơ bản...");
             
             // Danh sách các role cần tạo
-            String[] requiredRoles = {"admin", "doctor", "user"};
+            RoleEnum[] requiredRoles = {RoleEnum.ADMIN, RoleEnum.DOCTOR, RoleEnum.USER};
             
-            for (String roleName : requiredRoles) {
+            for (RoleEnum role : requiredRoles) {
                 // Kiểm tra role đã tồn tại chưa
-                if (roleRepository.findByName(roleName).isEmpty()) {
+                if (roleRepository.findByRoleEnum(role).isEmpty()) {
                     // Nếu chưa có, tạo mới
-                    log.info("Không tìm thấy role '{}', đang tạo mới...", roleName);
+                    log.info("Không tìm thấy role '{}', đang tạo mới...", role.name());
                     Role newRole = new Role();
-                    newRole.setName(roleName);
+                    newRole.setRoleEnum(role);
+                    newRole.setDescription("Role " + role.name());
                     roleRepository.save(newRole);
-                    log.info("✅ Đã tạo role '{}' thành công", roleName);
+                    log.info("✅ Đã tạo role '{}' thành công", role.name());
                 } else {
-                    log.debug("Role '{}' đã tồn tại trong hệ thống", roleName);
+                    log.debug("Role '{}' đã tồn tại trong hệ thống", role.name());
                 }
             }
             
@@ -72,7 +74,7 @@ public class DataInitializer implements CommandLineRunner {
     private void initializeAdminUser() {
         try {
             // Tìm role admin (đã được khởi tạo ở initializeRoles())
-            Role adminRole = roleRepository.findByName("admin")
+            Role adminRole = roleRepository.findByRoleEnum(RoleEnum.ADMIN)
                     .orElseThrow(() -> new RuntimeException(
                             "Role 'admin' chưa được khởi tạo. Vui lòng kiểm tra lại initializeRoles()"));
 
@@ -80,14 +82,14 @@ public class DataInitializer implements CommandLineRunner {
             List<User> allUsers = userRepository.findAll();
             boolean hasAdminUser = allUsers.stream()
                     .anyMatch(user -> user.getRole() != null 
-                            && "admin".equalsIgnoreCase(user.getRole().getName()));
+                            && RoleEnum.ADMIN.name().equalsIgnoreCase(user.getRole().getRoleEnum().name()));
 
             if (!hasAdminUser) {
                 // Tạo tài khoản admin
                 log.info("Không tìm thấy user admin, đang tạo tài khoản admin mặc định...");
                 
                 User adminUser = new User();
-                adminUser.setUsername("admin");
+                adminUser.setUsername(RoleEnum.ADMIN.name());
                 adminUser.setPassword(passwordEncoder.encode("admin")); // Hash password
                 adminUser.setEmail("admin@example.com");
                 adminUser.setRole(adminRole);

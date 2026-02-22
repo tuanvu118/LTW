@@ -7,6 +7,7 @@ package _2.LTW.util;
 import _2.LTW.entity.User;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.enums.RoleEnum;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -58,10 +59,12 @@ public class SecurityUtil {
     }
 
     public boolean isAdmin() {
-        return getCurrentRole().equals("admin");
+        User currentUser = getCurrentUser();
+        return currentUser.getRole().getRoleEnum().equals(RoleEnum.ADMIN);
     }
 
     public boolean isDoctor() {
-        return getCurrentRole().equals("doctor");
+        User currentUser = getCurrentUser();
+        return currentUser.getRole().getRoleEnum().equals(RoleEnum.DOCTOR);
     }    
 }

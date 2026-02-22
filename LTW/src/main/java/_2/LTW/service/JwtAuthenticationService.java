@@ -106,7 +106,7 @@ public class JwtAuthenticationService {
             Optional<User> userOptional = userRepository.findByUsername(username);
             if (userOptional.isPresent()) {
                 User user = userOptional.get();
-                roleName = user.getRole() != null ? user.getRole().getName() : "user";
+                roleName = user.getRole() != null ? user.getRole().getRoleEnum().name() : "user";
                 log.debug("Role từ database: {}", roleName);
             } else {
                 roleName = "user"; // Default role

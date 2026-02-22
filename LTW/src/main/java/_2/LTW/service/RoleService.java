@@ -11,7 +11,8 @@ import _2.LTW.dto.response.MessageResponse;
 import _2.LTW.entity.User;
 import _2.LTW.entity.Role;
 import _2.LTW.enums.RoleEnum;
-
+import _2.LTW.repository.UserRoleRepository;
+import _2.LTW.entity.UserRole;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,7 +26,7 @@ public class RoleService {
     
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
-
+    private final UserRoleRepository userRoleRepository;
     public List<RoleResponse> getAllRole() {
         
         return roleRepository.findAll().stream()
@@ -36,7 +37,10 @@ public class RoleService {
     public MessageResponse addRoleToUser(RoleRequest roleRequest) {
         User user = userRepository.findById(roleRequest.getUserId()).orElseThrow(() -> new RuntimeException("User not found"));
         Role role = roleRepository.findByRoleEnum(RoleEnum.valueOf(roleRequest.getRoleName().toUpperCase())).orElseThrow(() -> new RuntimeException("Role not found"));
-        user.setRole(role);
+        UserRole userRole = new UserRole();
+        userRole.setUser(user);
+        userRole.setRole(role);
+        userRoleRepository.save(userRole);
         userRepository.save(user);
         return new MessageResponse("Vai trò đã được thêm vào người dùng thành công");
     }

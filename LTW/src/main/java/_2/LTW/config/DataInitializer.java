@@ -2,8 +2,10 @@ package _2.LTW.config;
 
 import _2.LTW.entity.Role;
 import _2.LTW.entity.User;
+import _2.LTW.entity.UserRole;
 import _2.LTW.repository.RoleRepository;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.enums.RoleEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
     
     @Override
@@ -78,13 +81,10 @@ public class DataInitializer implements CommandLineRunner {
                     .orElseThrow(() -> new RuntimeException(
                             "Role 'admin' chưa được khởi tạo. Vui lòng kiểm tra lại initializeRoles()"));
 
-            // Kiểm tra xem đã có user nào có role admin chưa
-            List<User> allUsers = userRepository.findAll();
-            boolean hasAdminUser = allUsers.stream()
-                    .anyMatch(user -> user.getRole() != null 
-                            && RoleEnum.ADMIN.name().equalsIgnoreCase(user.getRole().getRoleEnum().name()));
+            // Kiểm tra xem đã có user nào có role admin chưa (qua user_role, vì User không có getUserRoles())
+            List<UserRole> userRoles = userRoleRepository.findByRole_Id(adminRole.getId().longValue());
 
-            if (!hasAdminUser) {
+            if (userRoles.isEmpty()) {
                 // Tạo tài khoản admin
                 log.info("Không tìm thấy user admin, đang tạo tài khoản admin mặc định...");
                 
@@ -92,7 +92,6 @@ public class DataInitializer implements CommandLineRunner {
                 adminUser.setUsername(RoleEnum.ADMIN.name());
                 adminUser.setPassword(passwordEncoder.encode("admin")); // Hash password
                 adminUser.setEmail("admin@example.com");
-                adminUser.setRole(adminRole);
                 adminUser.setCreatedAt(LocalDateTime.now());
                 adminUser.setIsDeleted(null);
                 
@@ -107,6 +106,22 @@ public class DataInitializer implements CommandLineRunner {
             }
         } catch (Exception e) {
             log.error("Lỗi khi khởi tạo tài khoản admin: {}", e.getMessage(), e);
+        }
+
+        // Tạo bảng user_role với admin có role admin
+        try {
+            Role adminRole = roleRepository.findByRoleEnum(RoleEnum.ADMIN)
+                    .orElseThrow(() -> new RuntimeException("Role ADMIN chưa được khởi tạo."));
+            User adminUser = userRepository.findByUsername(RoleEnum.ADMIN.name())
+                    .orElse(null);
+            if (adminUser != null && userRoleRepository.findByUserAndRole(adminUser, adminRole).isEmpty()) {
+                UserRole userRole = new UserRole();
+                userRole.setUser(adminUser);
+                userRole.setRole(adminRole);
+                userRoleRepository.save(userRole);
+            }
+        } catch (Exception e) {
+            log.error("Lỗi khi tạo bảng user_role: {}", e.getMessage(), e);
         }
     }
 }

@@ -1,6 +1,10 @@
 package _2.LTW.service;
 
 import _2.LTW.entity.User;
+import _2.LTW.entity.UserRole;
+import _2.LTW.entity.Role;
+import _2.LTW.enums.RoleEnum;
+import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.repository.UserRepository;
 import _2.LTW.util.CustomPrincipal;
 import _2.LTW.util.JwtUtil;
@@ -18,7 +22,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Optional;
-
+import java.util.stream.Collectors;
 /**
  * Service chứa tất cả logic xử lý JWT Authentication
  * Được sử dụng bởi cả Filter và Interceptor để tránh code trùng lặp
@@ -30,6 +34,7 @@ public class JwtAuthenticationService {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     // Tên header chứa JWT token
     private static final String AUTH_HEADER = "Authorization";
@@ -106,10 +111,16 @@ public class JwtAuthenticationService {
             Optional<User> userOptional = userRepository.findByUsername(username);
             if (userOptional.isPresent()) {
                 User user = userOptional.get();
-                roleName = user.getRole() != null ? user.getRole().getRoleEnum().name() : "user";
+                var roles = userRoleRepository.findByUser_Id(user.getId()).stream()
+                        .map(UserRole::getRole)
+                        .collect(Collectors.toList());
+                roleName = roles.stream()
+                        .map(Role::getRoleEnum)
+                        .map(RoleEnum::name)
+                        .collect(Collectors.joining(", "));
                 log.debug("Role từ database: {}", roleName);
             } else {
-                roleName = "user"; // Default role
+                roleName = "USER"; // Default role
                 log.warn("Không tìm thấy user trong database, dùng role mặc định: user");
             }
         }

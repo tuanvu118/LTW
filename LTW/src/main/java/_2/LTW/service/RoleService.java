@@ -8,8 +8,12 @@ import org.springframework.stereotype.Service;
 import _2.LTW.repository.RoleRepository;
 import _2.LTW.repository.UserRepository;
 import _2.LTW.dto.response.MessageResponse;
+import _2.LTW.exception.ErrorCode;
 import _2.LTW.entity.User;
 import _2.LTW.entity.Role;
+import _2.LTW.repository.UserRoleRepository;
+import _2.LTW.entity.UserRole;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,19 +27,40 @@ public class RoleService {
     
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
-
+    private final UserRoleRepository userRoleRepository;
     public List<RoleResponse> getAllRole() {
         
         return roleRepository.findAll().stream()
-                .map(role -> new RoleResponse(role.getId(), role.getName()))
+                .map(role -> new RoleResponse(role.getId(), role.getRoleEnum().name(), role.getDescription()))
                 .collect(Collectors.toList());
     }
 
     public MessageResponse addRoleToUser(RoleRequest roleRequest) {
         User user = userRepository.findById(roleRequest.getUserId()).orElseThrow(() -> new RuntimeException("User not found"));
-        Role role = roleRepository.findByName(roleRequest.getRoleName()).orElseThrow(() -> new RuntimeException("Role not found"));
-        user.setRole(role);
-        userRepository.save(user);
+        Role role = roleRepository.findById(roleRequest.getRoleId()).orElseThrow(() -> new RuntimeException("Role not found"));
+        if (!userRoleRepository.findByUserAndRole(user, role).isEmpty()) {
+            throw ErrorCode.CONFLICT.toException("Người dùng đã có vai trò này");
+        }
+        UserRole userRole = new UserRole();
+        userRole.setUser(user);
+        userRole.setRole(role);
+        userRoleRepository.save(userRole);
         return new MessageResponse("Vai trò đã được thêm vào người dùng thành công");
+    }
+
+    public MessageResponse deleteRoleFromUser(RoleRequest roleRequest) {
+        User user = userRepository.findById(roleRequest.getUserId()).orElseThrow(() -> new RuntimeException("User not found"));
+        Role role = roleRepository.findById(roleRequest.getRoleId()).orElseThrow(() -> new RuntimeException("Role not found"));
+        List<UserRole> userRoles = userRoleRepository.findByUserAndRole(user, role);
+        if (userRoles.isEmpty()) {
+            throw ErrorCode.NOT_FOUND.toException("Người dùng không có vai trò này");
+        }
+
+        List<UserRole> e = userRoleRepository.findByUser_Id(user.getId());
+        if (e.size() == 1) {
+            throw ErrorCode.CONFLICT.toException("Người dùng phải có ít nhất 1 vai trò");
+        }
+        userRoleRepository.delete(userRoles.get(0));
+        return new MessageResponse("Vai trò đã được xóa khỏi người dùng thành công");
     }
 }

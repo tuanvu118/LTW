@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import _2.LTW.enums.RoleEnum;
 
 @Data
 @Entity
@@ -20,5 +21,11 @@ public class Role {
     private Integer id;
 
     @Column(name = "name", nullable = false, unique = true)
-    private String name;
+    @Enumerated(EnumType.STRING)
+    private RoleEnum roleEnum;
+
+    @Column(name = "description", nullable = true)
+    private String description;
+
+    
 }

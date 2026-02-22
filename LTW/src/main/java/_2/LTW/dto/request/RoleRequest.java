@@ -10,5 +10,5 @@ import lombok.*;
 
 public class RoleRequest {
     private Long userId;
-    private String roleName;
+    private Integer roleId;
 }

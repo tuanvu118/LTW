@@ -48,11 +48,13 @@ public class SecurityConfig {
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Stateless session
             .authorizeHttpRequests(auth -> auth
+
                 .requestMatchers(HttpMethod.POST, POST_PUBLIC_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, GET_PUBLIC_ENDPOINT).permitAll()
-                .requestMatchers(HttpMethod.GET, "/roles").hasAuthority("ROLE_ADMIN")
-                .requestMatchers(HttpMethod.POST, "/roles").hasAuthority("ROLE_ADMIN")
-                .requestMatchers(HttpMethod.GET, "/users/all").hasAuthority("ROLE_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/roles").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/roles").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/roles").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/users/all").hasRole("ADMIN")
 //                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
                 .anyRequest().authenticated()
             )

@@ -17,9 +17,10 @@ public class CloudinaryService {
 
     private final Cloudinary cloudinary;
 
-    public Map upload(MultipartFile file)  {
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> upload(MultipartFile file)  {
         try{
-            Map data = this.cloudinary.uploader().upload(file.getBytes(), Map.of());
+            Map<String, Object> data = this.cloudinary.uploader().upload(file.getBytes(), Map.of());
             return data;
         }catch (IOException io){
             throw new RuntimeException("Image upload fail");

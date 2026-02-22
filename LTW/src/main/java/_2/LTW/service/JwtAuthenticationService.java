@@ -1,6 +1,10 @@
 package _2.LTW.service;
 
 import _2.LTW.entity.User;
+import _2.LTW.entity.UserRole;
+import _2.LTW.entity.Role;
+import _2.LTW.enums.RoleEnum;
+import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.repository.UserRepository;
 import _2.LTW.util.CustomPrincipal;
 import _2.LTW.util.JwtUtil;
@@ -16,9 +20,11 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
-
+import java.util.stream.Collectors;
 /**
  * Service chứa tất cả logic xử lý JWT Authentication
  * Được sử dụng bởi cả Filter và Interceptor để tránh code trùng lặp
@@ -30,6 +36,7 @@ public class JwtAuthenticationService {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     // Tên header chứa JWT token
     private static final String AUTH_HEADER = "Authorization";
@@ -106,10 +113,16 @@ public class JwtAuthenticationService {
             Optional<User> userOptional = userRepository.findByUsername(username);
             if (userOptional.isPresent()) {
                 User user = userOptional.get();
-                roleName = user.getRole() != null ? user.getRole().getName() : "user";
+                var roles = userRoleRepository.findByUser_Id(user.getId()).stream()
+                        .map(UserRole::getRole)
+                        .collect(Collectors.toList());
+                roleName = roles.stream()
+                        .map(Role::getRoleEnum)
+                        .map(RoleEnum::name)
+                        .collect(Collectors.joining(", "));
                 log.debug("Role từ database: {}", roleName);
             } else {
-                roleName = "user"; // Default role
+                roleName = "USER"; // Default role
                 log.warn("Không tìm thấy user trong database, dùng role mặc định: user");
             }
         }
@@ -118,18 +131,32 @@ public class JwtAuthenticationService {
     }
 
     /**
-     * Hàm 6: Chuyển đổi role name thành Spring Security authority
-     * Nhiệm vụ: Thêm prefix "ROLE_" và chuyển sang UPPERCASE để Spring Security nhận diện
+     * Hàm 6: Chuyển đổi role name thành Spring Security authority (một role)
      * Ví dụ: "admin" -> "ROLE_ADMIN"
-     * 
-     * @param roleName Role name từ token hoặc database
-     * @return Authority string với format "ROLE_XXX"
      */
     public String convertRoleToAuthority(String roleName) {
         if (roleName == null || roleName.isEmpty()) {
-            roleName = "user"; // Default role
+            roleName = "user";
         }
-        return "ROLE_" + roleName.toUpperCase();
+        return "ROLE_" + roleName.trim().toUpperCase();
+    }
+
+    /**
+     * Chuyển chuỗi role (có thể nhiều role cách nhau bởi dấu phẩy) thành danh sách authorities.
+     * Ví dụ: "ADMIN, USER" thành [ROLE_ADMIN, ROLE_USER] cho hasRole("ADMIN") và hasRole("USER").
+     */
+    public List<SimpleGrantedAuthority> convertRoleToAuthorities(String roleName) {
+        if (roleName == null || roleName.isEmpty()) {
+            return Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+        }
+        List<SimpleGrantedAuthority> authorities = Arrays.stream(roleName.split(",\\s*"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> new SimpleGrantedAuthority("ROLE_" + s.toUpperCase()))
+                .collect(Collectors.toList());
+        return authorities.isEmpty()
+                ? Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+                : authorities;
     }
 
     /**
@@ -148,14 +175,13 @@ public class JwtAuthenticationService {
             HttpServletRequest request) {
 
         CustomPrincipal principal = new CustomPrincipal(userId, username, roleName);
-        String authorityString = convertRoleToAuthority(roleName);
-        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(authorityString);
-        
-        UsernamePasswordAuthenticationToken authentication = 
+        List<SimpleGrantedAuthority> authorities = convertRoleToAuthorities(roleName);
+
+        UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(
                 principal,
                 null,
-                Collections.singletonList(authority)
+                authorities
             );
         
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -239,8 +265,9 @@ public class JwtAuthenticationService {
                 createAuthentication(userId, username, roleName, request);
             setSecurityContext(authentication);
 
-            log.info("✅ Đã xác thực user: {} với role: {}, authority: {} cho request: {}", 
-                    username, roleName, convertRoleToAuthority(roleName), request.getRequestURI());
+            List<SimpleGrantedAuthority> grantedAuthorities = convertRoleToAuthorities(roleName);
+            log.info("✅ Đã xác thực user: {} với role: {}, authorities: {} cho request: {}",
+                    username, roleName, grantedAuthorities, request.getRequestURI());
             
             return true;
 

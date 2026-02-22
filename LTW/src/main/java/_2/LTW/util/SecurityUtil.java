@@ -5,8 +5,12 @@ package _2.LTW.util;
  */
 
 import _2.LTW.entity.User;
+import _2.LTW.entity.UserRole;
+import _2.LTW.entity.Role;
+import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.enums.RoleEnum;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +21,7 @@ import org.springframework.stereotype.Component;
 public class SecurityUtil {
 
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     public CustomPrincipal getCurrentPrincipal(){
 
@@ -62,10 +67,18 @@ public class SecurityUtil {
     }
 
     public boolean isAdmin() {
-        return getCurrentRole().equals("admin");
+        User currentUser = getCurrentUser();
+        return userRoleRepository.findByUser_Id(currentUser.getId()).stream()
+                .map(UserRole::getRole)
+                .map(Role::getRoleEnum)
+                .anyMatch(role -> role.equals(RoleEnum.ADMIN));
     }
 
     public boolean isDoctor() {
-        return getCurrentRole().equals("doctor");
+        User currentUser = getCurrentUser();
+        return userRoleRepository.findByUser_Id(currentUser.getId()).stream()
+                .map(UserRole::getRole)
+                .map(Role::getRoleEnum)
+                .anyMatch(role -> role.equals(RoleEnum.DOCTOR));
     }    
 }

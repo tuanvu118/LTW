@@ -27,5 +27,10 @@ public class RoleController {
     public ResponseEntity<MessageResponse> addRoleToUser(@RequestBody RoleRequest roleRequest) {
         return ResponseEntity.ok(roleService.addRoleToUser(roleRequest));
     }
+
+    @DeleteMapping
+    public ResponseEntity<MessageResponse> deleteRoleFromUser(@RequestBody RoleRequest roleRequest) {
+        return ResponseEntity.ok(roleService.deleteRoleFromUser(roleRequest));
+    }
     
 }

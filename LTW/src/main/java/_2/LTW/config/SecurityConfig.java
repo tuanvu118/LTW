@@ -53,6 +53,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, GET_PUBLIC_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/roles").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/users/all").hasRole("ADMIN")
 //                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
                 .anyRequest().authenticated()

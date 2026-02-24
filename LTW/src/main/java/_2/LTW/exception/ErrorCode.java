@@ -40,7 +40,11 @@ public enum ErrorCode {
     EMAIL_ALREADY_EXISTS(3004, "Email đã tồn tại", HttpStatus.CONFLICT),
     INVALID_PASSWORD(3005, "Mật khẩu không đúng", HttpStatus.BAD_REQUEST),
     ROLE_NOT_FOUND(3006, "Không tìm thấy vai trò", HttpStatus.NOT_FOUND),
+
+    PET_NOT_FOUND(4101, "Không tìm thấy thú cưng", HttpStatus.NOT_FOUND),
+    PET_OWNER_NOT_FOUND(4102, "Không tìm thấy chủ thú cưng", HttpStatus.NOT_FOUND),
     ;
+
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
         this.code = code;

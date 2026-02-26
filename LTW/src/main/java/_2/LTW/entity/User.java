@@ -1,5 +1,6 @@
 package _2.LTW.entity;
 
+import _2.LTW.entity.Pets.Pets;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.Getter;
@@ -8,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Entity
@@ -39,4 +41,9 @@ public class User {
 
     @Column(name = "is_deleted", nullable = true)
     private Boolean isDeleted = null;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY,
+            cascade = {CascadeType.DETACH,CascadeType.MERGE,CascadeType.PERSIST, CascadeType.REFRESH})
+    List<Pets> pets;
+
 }

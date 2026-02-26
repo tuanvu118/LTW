@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
@@ -61,6 +62,16 @@ public class MedicalServiceService {
         medicalServiceMapper.updateMedicalService(medicalService, request);
 
         return medicalServiceMapper.toMedicalServiceResponse(medicalServiceRepository.save(medicalService));
+
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    public void delete(Long id){
+
+        MedicalService service = medicalServiceRepository.findById(id)
+                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Không tìm thấy dịch vụ này"));
+
+        medicalServiceRepository.delete(service);
 
     }
 

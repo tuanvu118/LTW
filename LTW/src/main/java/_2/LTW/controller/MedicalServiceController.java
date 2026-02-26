@@ -52,4 +52,12 @@ public class MedicalServiceController {
 
     }
 
+    @DeleteMapping("/{id}")
+    ApiResponse<String> deleteMedicalService(@PathVariable Long id){
+
+        medicalServiceService.delete(id);
+        return ApiResponse.ok("Đã xóa dịch vụ");
+
+    }
+
 }

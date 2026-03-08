@@ -67,6 +67,22 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
     );
 
     @Query("""
+        SELECT dw.dayOfWeek, dw.shiftType
+        FROM DoctorWork dw
+        WHERE dw.applyFromWeek = :weekStart
+        AND dw.doctor.id <> :doctorId
+        AND dw.slotStatus IN :statuses
+        GROUP BY dw.dayOfWeek, dw.shiftType
+        HAVING COUNT(*) >= :capacity
+    """)
+    List<Object[]> findFullSlots(
+            @Param("doctorId") Long doctorId,
+            @Param("weekStart") LocalDate weekStart,
+            @Param("statuses") List<SlotStatus> statuses,
+            @Param("capacity") Integer capacity
+    );
+
+    @Query("""
         SELECT DISTINCT dw.doctor
         FROM DoctorWork dw
         JOIN dw.doctor d

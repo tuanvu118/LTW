@@ -36,7 +36,7 @@ public class DoctorWorkService {
 
     static int MAX_DOCTOR_PER_SHIFT = 2;
 
-    private record SlotKey(Integer dayOfWeek, ShiftType shiftType){
+    public record SlotKey(Integer dayOfWeek, ShiftType shiftType){
 
         @Override
         public String toString() {
@@ -68,6 +68,13 @@ public class DoctorWorkService {
         User doctor = userRepository.findById(doctorId)
                 .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
         weeklyScheduleValidator.validateSlots(request.getSlots());
+        validateSlotCapacity(
+                doctorId,
+                weekStart,
+                request.getSlots().stream()
+                        .map(s -> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                        .toList()
+        );
 
         var exists = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
 
@@ -101,6 +108,21 @@ public class DoctorWorkService {
         return doctors.stream()
                 .map(userMapper::toUserResponse)
                 .toList();
+
+    }
+
+    @PreAuthorize("hasRole('DOCTOR')")
+    public Set<SlotKey> getFullSlots(Long doctorId, LocalDate weekStart){
+
+        List<Object[]> fullSlots = doctorWorkRepository.findFullSlots(
+                doctorId,
+                weekStart,
+                List.of(SlotStatus.PENDING, SlotStatus.APPROVED),
+                MAX_DOCTOR_PER_SHIFT);
+
+        return fullSlots.stream()
+                .map(s -> new SlotKey((Integer) s[0], (ShiftType) s[1]))
+                .collect(Collectors.toSet());
 
     }
 
@@ -184,6 +206,14 @@ public class DoctorWorkService {
 
         weeklyScheduleValidator.validateSlots(request.getSlots());
 
+        validateSlotCapacity(
+                doctorId,
+                weekStart,
+                request.getSlots().stream()
+                        .map(s-> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                        .toList()
+        );
+
         doctorWorkRepository.deleteByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
         doctorWorkRepository.flush();
 
@@ -214,6 +244,16 @@ public class DoctorWorkService {
 
         if(slots.isEmpty()){
             throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa đăng kí lịch tuần này");
+        }
+
+        if(status == SlotStatus.APPROVED){
+            validateSlotCapacity(
+                    doctorId,
+                    weekStart,
+                    slots.stream()
+                            .map(s-> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                            .toList()
+            );
         }
 
         slots.forEach(slot -> slot.setSlotStatus(status));
@@ -297,6 +337,24 @@ public class DoctorWorkService {
             return ShiftType.MORNING;
         }
         else return ShiftType.AFTERNOON;
+
+    }
+
+    private void validateSlotCapacity(Long doctorId, LocalDate weekStart, Collection<SlotKey> slots){
+
+        Set<SlotKey> fullSlots = getFullSlots(doctorId, weekStart);
+
+        List<SlotKey> errorSlots = slots.stream()
+                .filter(fullSlots::contains)
+                .toList();
+
+        if(!errorSlots.isEmpty()){
+            String slotMessage = errorSlots.stream()
+                    .map(SlotKey::toString)
+                    .collect(Collectors.joining(", "));
+
+            throw ErrorCode.CONFLICT.toException("Những khoảng thời gian sau đã quá giới hạn đăng kí: " + slotMessage);
+        }
 
     }
 

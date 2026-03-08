@@ -1,6 +1,7 @@
 package _2.LTW.validate;
 
 import _2.LTW.dto.request.doctor_work.SlotRequest;
+import _2.LTW.enums.SlotStatus;
 import _2.LTW.exception.ErrorCode;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +24,9 @@ public class WeeklyScheduleValidator {
 
     public void validateSlots(List<SlotRequest> slots){
 
-//        if(slots == null || slots.isEmpty()){
-//            throw ErrorCode.BAD_REQUEST.toException("Lịch không được để trống");
-//        }
+        if(slots == null || slots.isEmpty()){
+            throw ErrorCode.BAD_REQUEST.toException("Lịch không được để trống");
+        }
 
         if(slots.size() > 14){
             throw ErrorCode.BAD_REQUEST.toException("Đăng kí tối đa 14 buổi một tuần");
@@ -43,7 +44,7 @@ public class WeeklyScheduleValidator {
 
     }
 
-    public void validateViewWeekStart(LocalDate weekStart){
+    public void validateViewWeekStartForUser(LocalDate weekStart, SlotStatus status){
 
 //        LocalDate today = LocalDate.now();
 
@@ -52,14 +53,12 @@ public class WeeklyScheduleValidator {
         LocalDate currentMonday = today.with(DayOfWeek.MONDAY);
         LocalDate nextWeekMonday = currentMonday.plusWeeks(1);
 
-        boolean isBeforeOrEqualWednesday = today.getDayOfWeek().getValue() <= DayOfWeek.WEDNESDAY.getValue();
-
-        if(isBeforeOrEqualWednesday && weekStart.isAfter(currentMonday)){
-            throw ErrorCode.BAD_REQUEST.toException("Chỉ đặt lịch trong tuần này");
+        if(weekStart.isAfter(nextWeekMonday)){
+            throw ErrorCode.BAD_REQUEST.toException("Chỉ được đặt lịch trong tuần này hoặc tuần sau");
         }
 
-        if(!isBeforeOrEqualWednesday && weekStart.isAfter(nextWeekMonday)){
-            throw ErrorCode.BAD_REQUEST.toException("Chỉ được đặt lịch trong tuần này hoặc tuần sau");
+        if(status != SlotStatus.APPROVED){
+            throw ErrorCode.UNAUTHORIZED.toException("Người dùng chỉ được xem lịch đã được xác nhận");
         }
 
     }

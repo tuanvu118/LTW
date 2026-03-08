@@ -1,9 +1,12 @@
 package _2.LTW.repository;
 
 import _2.LTW.entity.DoctorWork;
+import _2.LTW.entity.User;
 import _2.LTW.enums.ShiftType;
 import _2.LTW.enums.SlotStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,14 +24,9 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
         SELECT dw
         FROM DoctorWork dw
         JOIN FETCH dw.doctor d
-        WHERE dw.applyFromWeek = (
-            SELECT MAX(dw2.applyFromWeek)
-            FROM DoctorWork dw2
-            WHERE dw.doctor = dw2.doctor
-            AND dw2.applyFromWeek <= :weekStart
-        )
+        WHERE dw.applyFromWeek = :weekStart
     """)
-    List<DoctorWork> findLastestSchedulesByWeek(
+    List<DoctorWork> findSchedulesByWeek(
             @Param("weekStart") LocalDate weekStart
     );
 
@@ -36,16 +34,10 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
         SELECT dw
         FROM DoctorWork dw
         JOIN FETCH dw.doctor d
-        WHERE dw.applyFromWeek = (
-            SELECT MAX(dw2.applyFromWeek)
-            FROM DoctorWork dw2
-            WHERE dw.doctor = dw2.doctor
-            AND dw2.applyFromWeek <= :weekStart
-            AND dw2.slotStatus = :status
-        )
+        WHERE dw.applyFromWeek = :weekStart
         AND dw.slotStatus = :status
     """)
-    List<DoctorWork> findLastestSchedulesByWeekAndStatus(
+    List<DoctorWork> findSchedulesByWeekAndStatus(
             @Param("weekStart") LocalDate weekStart,
             @Param("status") SlotStatus status
     );
@@ -53,15 +45,10 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
     @Query("""
         SELECT dw
         FROM DoctorWork dw
-        WHERE dw.applyFromWeek = (
-            SELECT MAX(dw2.applyFromWeek)
-            FROM DoctorWork dw2
-            WHERE dw2.applyFromWeek <= :weekStart
-            AND dw2.doctor.id = :doctorId
-        )
+        WHERE dw.applyFromWeek = :weekStart
         AND dw.doctor.id = :doctorId
     """)
-    List<DoctorWork> findLastestScheduleByWeek(
+    List<DoctorWork> findScheduleByWeek(
             @Param("doctorId") Long doctorId,
             @Param("weekStart") LocalDate weekStart
     );
@@ -69,43 +56,40 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
     @Query("""
         SELECT dw
         FROM DoctorWork dw
-        WHERE dw.applyFromWeek = (
-            SELECT MAX(dw2.applyFromWeek)
-            FROM DoctorWork dw2
-            WHERE dw2.applyFromWeek <= :weekStart
-            AND dw2.doctor.id = :doctorId
-            AND dw2.slotStatus = :status
-        )
+        WHERE dw.applyFromWeek = :weekStart
         AND dw.doctor.id = :doctorId
         AND dw.slotStatus = :status
     """)
-    List<DoctorWork> findLastestScheduleByWeekAndStatus(
+    List<DoctorWork> findScheduleByWeekAndStatus(
             @Param("doctorId") Long doctorId,
             @Param("weekStart") LocalDate weekStart,
             @Param("status") SlotStatus status
     );
 
     @Query("""
-        SELECT dw
+        SELECT DISTINCT dw.doctor
         FROM DoctorWork dw
-        JOIN FETCH dw.doctor d
-        WHERE dw.applyFromWeek = (
-            SELECT MAX(dw2.applyFromWeek)
-            FROM DoctorWork dw2
-            WHERE dw2.doctor = dw.doctor
-            AND :bookingDate >= dw2.applyFromWeek
-        )
+        JOIN dw.doctor d
+        WHERE dw.applyFromWeek = :weekStart
         AND dw.dayOfWeek = :dayOfWeek
         AND dw.shiftType = :shiftType
         AND dw.slotStatus = :status
     """)
-    List<DoctorWork> findAvailableDoctors(
-            @Param("bookingDate") LocalDate bookingDate,
+    List<User> findAvailableDoctors(
+            @Param("weekStart") LocalDate weekStart,
             @Param("dayOfWeek") int dayOfWeek,
             @Param("shiftType") ShiftType shiftType,
             @Param("status") SlotStatus status
     );
 
     void deleteByDoctor_IdAndApplyFromWeek(Long doctorId, LocalDate applyFromWeek);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT dw
+        FROM DoctorWork dw
+        WHERE dw.applyFromWeek = :weekStart
+    """)
+    List<DoctorWork> lockWeekSlots(@Param("weekStart") LocalDate weekStart);
 
 }

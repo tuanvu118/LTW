@@ -16,7 +16,7 @@ public class DevClockConfig {
     public Clock clock(){
 
         return Clock.fixed(
-                LocalDateTime.of(2026, 2, 24, 9, 0)
+                LocalDateTime.of(2026, 3, 10, 9, 0)
                         .atZone(ZoneId.systemDefault())
                         .toInstant(),
                 ZoneId.systemDefault()

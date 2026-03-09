@@ -34,7 +34,7 @@ public class SecurityConfig {
     };
 
     private static final String[] GET_PUBLIC_ENDPOINT = {
-            "/medical-services", "/medical-services/{id}"
+            "/medical-services", "/medical-services/{id}", "/treatment-methods"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -55,6 +55,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/users/all").hasRole("ADMIN")
+
+                .requestMatchers(HttpMethod.POST, "/treatment-methods").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/treatment-methods/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/treatment-methods/{id}").hasRole("ADMIN")
 //                .requestMatchers(HttpMethod.PUT, "/users/{id}").authenticated()
                 .anyRequest().authenticated()
             )

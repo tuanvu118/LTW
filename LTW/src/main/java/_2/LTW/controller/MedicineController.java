@@ -1,6 +1,7 @@
 package _2.LTW.controller;
 
 
+import _2.LTW.dto.request.MedicineRequest;
 import _2.LTW.dto.response.MedicineResponse;
 import _2.LTW.entity.Medicine;
 import _2.LTW.service.MedicineService;
@@ -16,7 +17,7 @@ import java.util.List;
 @RequestMapping("/medicines")
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-
+@Slf4j
 public class MedicineController {
 
     private final MedicineService medicineService;
@@ -35,5 +36,14 @@ public class MedicineController {
     public MedicineResponse createMedicine(@RequestBody Medicine medicine) {
         return medicineService.createMedicine(medicine);
     }
-}
 
+    @PutMapping("/{id}")
+    public MedicineResponse updateMedicine(@PathVariable Integer id, @RequestBody MedicineRequest request) {
+        return medicineService.updateMedicine(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public MedicineResponse deleteMedicine(@PathVariable Integer id) {
+        return medicineService.deleteMedicine(id);
+    }
+}

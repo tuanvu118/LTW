@@ -4,7 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3077d8ed-10c7-4632-9986-9a2a4e310219" name="Changes" comment="" />
+    <list default="true" id="3077d8ed-10c7-4632-9986-9a2a4e310219" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/config/SecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/config/SecurityConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/controller/MedicineController.java" beforeDir="false" afterPath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/controller/MedicineController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/service/MedicineService.java" beforeDir="false" afterPath="$PROJECT_DIR$/LTW/src/main/java/_2/LTW/service/MedicineService.java" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -69,7 +74,7 @@
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;Spring Boot.LtwApplication.executor&quot;: &quot;Run&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;medicine&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;D:/LTW&quot;,
@@ -128,7 +133,9 @@
       <workItem from="1772603290071" duration="8728000" />
       <workItem from="1772788155113" duration="6102000" />
       <workItem from="1772857593551" duration="686000" />
-      <workItem from="1772958198467" duration="9346000" />
+      <workItem from="1772958198467" duration="10783000" />
+      <workItem from="1772997232784" duration="851000" />
+      <workItem from="1773042010683" duration="1515000" />
     </task>
     <servers />
   </component>

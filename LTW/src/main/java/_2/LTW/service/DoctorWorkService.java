@@ -24,7 +24,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.time.*;
-import java.util.List;
+import java.time.format.TextStyle;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +33,18 @@ import java.util.stream.Collectors;
 @Slf4j
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class DoctorWorkService {
+
+    static int MAX_DOCTOR_PER_SHIFT = 2;
+
+    public record SlotKey(Integer dayOfWeek, ShiftType shiftType){
+
+        @Override
+        public String toString() {
+            return DayOfWeek.of(dayOfWeek).getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                    + " " +
+                    shiftType.name().toLowerCase();
+        }
+    }
 
     UserRepository userRepository;
     DoctorWorkRepository doctorWorkRepository;
@@ -43,16 +56,25 @@ public class DoctorWorkService {
     Clock clock;
 
     @PreAuthorize("hasRole('DOCTOR')")
+    @Transactional
     public WeeklyScheduleResponse createNextWeekSchedule(WeeklyScheduleRequest request){
+
+        LocalDate weekStart = getNextWeekMonday();
+
+        doctorWorkRepository.lockWeekSlots(weekStart);
 
         Long doctorId = securityUtil.getCurrentUserId();
 
         User doctor = userRepository.findById(doctorId)
                 .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
-
-        LocalDate weekStart = getNextWeekMonday();
-
         weeklyScheduleValidator.validateSlots(request.getSlots());
+        validateSlotCapacity(
+                doctorId,
+                weekStart,
+                request.getSlots().stream()
+                        .map(s -> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                        .toList()
+        );
 
         var exists = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
 
@@ -60,9 +82,181 @@ public class DoctorWorkService {
             throw ErrorCode.CONFLICT.toException("Đã đăng kí lịch tuần sau");
         }
 
-        List<DoctorWork> slots = buildPendingSlots(doctor, weekStart, request);
+        List<DoctorWork> slots = buildSlots(doctor, weekStart, request, SlotStatus.PENDING);
 
         doctorWorkRepository.saveAll(slots);
+
+        return buildWeeklyResponse(doctor, weekStart, slots);
+
+    }
+
+    public List<UserResponse> getAvailableDoctors(LocalDate bookingDate, LocalTime startTime){
+
+        bookingDateTimeValidator.validate(bookingDate, startTime);
+
+        int dayOfWeek = bookingDate.getDayOfWeek().getValue();
+        ShiftType shiftType = calculateShiftType(startTime);
+        LocalDate weekStart = bookingDate.with(DayOfWeek.MONDAY);
+
+        List<User> doctors = doctorWorkRepository.findAvailableDoctors(
+                weekStart,
+                dayOfWeek,
+                shiftType,
+                SlotStatus.APPROVED
+        );
+
+        return doctors.stream()
+                .map(userMapper::toUserResponse)
+                .toList();
+
+    }
+
+    @PreAuthorize("hasRole('DOCTOR')")
+    public Set<SlotKey> getFullSlots(Long doctorId, LocalDate weekStart){
+
+        List<Object[]> fullSlots = doctorWorkRepository.findFullSlots(
+                doctorId,
+                weekStart,
+                List.of(SlotStatus.PENDING, SlotStatus.APPROVED),
+                MAX_DOCTOR_PER_SHIFT);
+
+        return fullSlots.stream()
+                .map(s -> new SlotKey((Integer) s[0], (ShiftType) s[1]))
+                .collect(Collectors.toSet());
+
+    }
+
+    public List<WeeklyScheduleResponse> getWeeklySchedules(LocalDate weekStart, SlotStatus status){
+
+        log.info(String.valueOf(LocalDateTime.now(clock)));
+
+        if(!securityUtil.isDoctor() && !securityUtil.isAdmin()){
+            weeklyScheduleValidator.validateViewWeekStartForUser(weekStart, status);
+        }
+
+        if(weekStart.getDayOfWeek() != DayOfWeek.MONDAY){
+            throw ErrorCode.BAD_REQUEST.toException("Ngày bắt đầu tuần phải là thứ Hai");
+        }
+
+        List<DoctorWork> works = status != null
+                ? doctorWorkRepository.findSchedulesByWeekAndStatus(weekStart, status)
+                :doctorWorkRepository.findSchedulesByWeek(weekStart);
+
+        if(works.isEmpty()){
+            return List.of();
+        }
+
+        return works.stream()
+                .collect(Collectors.groupingBy(DoctorWork::getDoctor))
+                .entrySet()
+                .stream()
+                .map(entry -> buildWeeklyResponse(
+                        entry.getKey(),
+                        entry.getValue().getFirst().getApplyFromWeek(),
+                        entry.getValue()
+                ))
+                .toList();
+
+    }
+
+    public WeeklyScheduleResponse getWeeklyScheduleByDoctor(Long doctorId, LocalDate weekStart, SlotStatus status){
+
+        log.info(String.valueOf(LocalDateTime.now(clock)));
+
+        if(!securityUtil.isDoctor() && !securityUtil.isAdmin()){
+            weeklyScheduleValidator.validateViewWeekStartForUser(weekStart, status);
+        }
+
+        if(weekStart.getDayOfWeek() != DayOfWeek.MONDAY){
+            throw ErrorCode.BAD_REQUEST.toException("Ngày bắt đầu tuần phải là thứ Hai");
+        }
+
+        User doctor = userRepository.findById(doctorId)
+                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Bác sĩ này không tồn tại"));
+
+        List<DoctorWork> slots = status != null
+                ? doctorWorkRepository.findScheduleByWeekAndStatus(doctorId, weekStart, status)
+                : doctorWorkRepository.findScheduleByWeek(doctorId, weekStart);
+
+        if(slots.isEmpty()){
+            throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa có lịch tuần này với trạng thái đăng tìm kiếm");
+        }
+
+        return buildWeeklyResponse(doctor, slots.getFirst().getApplyFromWeek(), slots);
+
+    }
+
+    @PreAuthorize("hasRole('ADMIN')or#doctorId==authentication.principal.id")
+    @Transactional
+    public WeeklyScheduleResponse updateWeeklySchedule(Long doctorId, WeeklyScheduleRequest request){
+
+        LocalDate weekStart = getNextWeekMonday();
+
+        doctorWorkRepository.lockWeekSlots(weekStart);
+
+        User doctor = userRepository.findById(doctorId)
+                .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
+
+
+        List<DoctorWork> slots = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
+
+        if(slots.isEmpty()){
+            throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa đăng kí lịch tuần này");
+        }
+
+        weeklyScheduleValidator.validateSlots(request.getSlots());
+
+        validateSlotCapacity(
+                doctorId,
+                weekStart,
+                request.getSlots().stream()
+                        .map(s-> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                        .toList()
+        );
+
+        doctorWorkRepository.deleteByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
+        doctorWorkRepository.flush();
+
+        SlotStatus status = securityUtil.isAdmin()
+                ? SlotStatus.APPROVED
+                : SlotStatus.PENDING;
+
+        slots = buildSlots(doctor, weekStart, request, status);
+
+        doctorWorkRepository.saveAll(slots);
+
+        return buildWeeklyResponse(doctor, weekStart, slots);
+
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public WeeklyScheduleResponse updateScheduleStatus(
+            Long doctorId,
+            SlotStatus status,
+            LocalDate weekStart
+    ){
+
+        User doctor = userRepository.findById(doctorId)
+                .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
+
+        List<DoctorWork> slots = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
+
+        if(slots.isEmpty()){
+            throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa đăng kí lịch tuần này");
+        }
+
+        if(status == SlotStatus.APPROVED){
+            validateSlotCapacity(
+                    doctorId,
+                    weekStart,
+                    slots.stream()
+                            .map(s-> new SlotKey(s.getDayOfWeek(), s.getShiftType()))
+                            .toList()
+            );
+        }
+
+        slots.forEach(slot -> slot.setSlotStatus(status));
 
         return buildWeeklyResponse(doctor, weekStart, slots);
 
@@ -76,10 +270,11 @@ public class DoctorWorkService {
 
     }
 
-    private List<DoctorWork> buildPendingSlots(
+    private List<DoctorWork> buildSlots(
             User doctor,
             LocalDate weekStart,
-            WeeklyScheduleRequest request
+            WeeklyScheduleRequest request,
+            SlotStatus status
     ){
 
         return request.getSlots()
@@ -88,27 +283,7 @@ public class DoctorWorkService {
                     DoctorWork slot = doctorWorkMapper.toDoctorWork(slotRequest);
                     slot.setDoctor(doctor);
                     slot.setApplyFromWeek(weekStart);
-                    slot.setSlotStatus(SlotStatus.PENDING);
-
-                    return slot;
-                })
-                .toList();
-
-    }
-
-    private List<DoctorWork> buildApprovedSlots(
-            User doctor,
-            LocalDate weekStart,
-            WeeklyScheduleRequest request
-    ){
-
-        return request.getSlots()
-                .stream()
-                .map(slotRequest -> {
-                    DoctorWork slot = doctorWorkMapper.toDoctorWork(slotRequest);
-                    slot.setDoctor(doctor);
-                    slot.setApplyFromWeek(weekStart);
-                    slot.setSlotStatus(SlotStatus.APPROVED);
+                    slot.setSlotStatus(status);
 
                     return slot;
                 })
@@ -165,134 +340,21 @@ public class DoctorWorkService {
 
     }
 
-    public List<UserResponse> getAvailableDoctors(LocalDate bookingDate, LocalTime startTime){
+    private void validateSlotCapacity(Long doctorId, LocalDate weekStart, Collection<SlotKey> slots){
 
-        bookingDateTimeValidator.validate(bookingDate, startTime);
+        Set<SlotKey> fullSlots = getFullSlots(doctorId, weekStart);
 
-        int dayOfWeek = bookingDate.getDayOfWeek().getValue();
-        ShiftType shiftType = calculateShiftType(startTime);
-
-        List<DoctorWork> works = doctorWorkRepository.findAvailableDoctors(
-                bookingDate,
-                dayOfWeek,
-                shiftType,
-                SlotStatus.PENDING
-        );
-
-        return works.stream()
-                .map(DoctorWork::getDoctor)
-                .distinct()
-                .map(userMapper::toUserResponse)
+        List<SlotKey> errorSlots = slots.stream()
+                .filter(fullSlots::contains)
                 .toList();
 
-    }
+        if(!errorSlots.isEmpty()){
+            String slotMessage = errorSlots.stream()
+                    .map(SlotKey::toString)
+                    .collect(Collectors.joining(", "));
 
-    public List<WeeklyScheduleResponse> getWeeklySchedules(LocalDate weekStart, SlotStatus status){
-
-        log.info(String.valueOf(LocalDateTime.now(clock)));
-
-        if(securityUtil.isUser()){
-            weeklyScheduleValidator.validateViewWeekStart(weekStart);
+            throw ErrorCode.CONFLICT.toException("Những khoảng thời gian sau đã quá giới hạn đăng kí: " + slotMessage);
         }
-
-        if(weekStart.getDayOfWeek() != DayOfWeek.MONDAY){
-            throw ErrorCode.BAD_REQUEST.toException("Ngày bắt đầu tuần phải là thứ Hai");
-        }
-
-        List<DoctorWork> works = status != null
-                ? doctorWorkRepository.findLastestSchedulesByWeekAndStatus(weekStart, status)
-                :doctorWorkRepository.findLastestSchedulesByWeek(weekStart);
-
-        if(works.isEmpty()){
-            return List.of();
-        }
-
-        return works.stream()
-                .collect(Collectors.groupingBy(DoctorWork::getDoctor))
-                .entrySet()
-                .stream()
-                .map(entry -> buildWeeklyResponse(
-                        entry.getKey(),
-                        entry.getValue().getFirst().getApplyFromWeek(),
-                        entry.getValue()
-                ))
-                .toList();
-
-    }
-
-    public WeeklyScheduleResponse getWeeklyScheduleByDoctor(Long doctorId, LocalDate weekStart, SlotStatus status){
-
-        log.info(String.valueOf(LocalDateTime.now(clock)));
-
-        if(securityUtil.isUser()){
-            weeklyScheduleValidator.validateViewWeekStart(weekStart);
-        }
-
-        if(weekStart.getDayOfWeek() != DayOfWeek.MONDAY){
-            throw ErrorCode.BAD_REQUEST.toException("Ngày bắt đầu tuần phải là thứ Hai");
-        }
-
-        User doctor = userRepository.findById(doctorId)
-                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Bác sĩ này không tồn tại"));
-
-        List<DoctorWork> slots = status != null
-                ? doctorWorkRepository.findLastestScheduleByWeekAndStatus(doctorId, weekStart, status)
-                : doctorWorkRepository.findLastestScheduleByWeek(doctorId, weekStart);
-
-        return buildWeeklyResponse(doctor, slots.getFirst().getApplyFromWeek(), slots);
-
-    }
-
-    @PreAuthorize("hasRole('ADMIN')or#doctorId==authentication.principal.id")
-    @Transactional
-    public WeeklyScheduleResponse updateWeeklySchedule(Long doctorId, WeeklyScheduleRequest request){
-
-        User doctor = userRepository.findById(doctorId)
-                .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
-
-        LocalDate weekStart = getNextWeekMonday();
-
-        List<DoctorWork> slots = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
-
-        if(slots.isEmpty()){
-            throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa đăng kí lịch tuần này");
-        }
-
-        doctorWorkRepository.deleteByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
-        doctorWorkRepository.flush();
-
-        weeklyScheduleValidator.validateSlots(request.getSlots());
-
-        slots = securityUtil.isAdmin()
-                ? buildApprovedSlots(doctor, weekStart, request)
-                : buildPendingSlots(doctor, weekStart, request);
-
-        doctorWorkRepository.saveAll(slots);
-
-        return buildWeeklyResponse(doctor, weekStart, slots);
-
-    }
-
-    @PreAuthorize("hasRole('ADMIN')")
-    @Transactional
-    public WeeklyScheduleResponse updateScheduleStatus(
-            Long doctorId,
-            SlotStatus status,
-            LocalDate weekStart
-    ){
-
-        User doctor = userRepository.findById(doctorId)
-                .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException("Bác sĩ này không tồn tại"));
-
-        List<DoctorWork> slots = doctorWorkRepository.findByDoctor_IdAndApplyFromWeek(doctorId, weekStart);
-
-        if(slots.isEmpty()){
-            throw ErrorCode.NOT_FOUND.toException("Bác sĩ chưa đăng kí lịch tuần này");
-        }
-
-        slots.forEach(slot -> slot.setSlotStatus(status));
-
-        return buildWeeklyResponse(doctor, weekStart, slots);
 
     }
 

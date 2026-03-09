@@ -2,8 +2,10 @@ package _2.LTW.exception;
 
 import _2.LTW.dto.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -98,6 +100,28 @@ public class GlobalExceptionHandler {
         
         return ResponseEntity
                 .status(ErrorCode.BAD_REQUEST.getStatusCode())
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException ex,
+            HttpServletRequest request
+    ) {
+
+        log.warn("Access denied: {} - User không có quyền truy cập endpoint: {}",
+                request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "anonymous",
+                request.getRequestURI());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .code(ErrorCode.UNAUTHORIZED.getCode())
+                .message(ErrorCode.UNAUTHORIZED.getMessage())
+                .timestamp(LocalDateTime.now())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity
+                .status(HttpServletResponse.SC_FORBIDDEN)
                 .body(errorResponse);
     }
 

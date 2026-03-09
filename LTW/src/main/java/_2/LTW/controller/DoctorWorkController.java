@@ -3,6 +3,7 @@ package _2.LTW.controller;
 import _2.LTW.dto.request.ApiResponse;
 import _2.LTW.dto.request.doctor_work.WeeklyScheduleRequest;
 import _2.LTW.dto.response.UserResponse;
+import _2.LTW.dto.response.doctor_work.SlotResponse;
 import _2.LTW.dto.response.doctor_work.WeeklyScheduleResponse;
 import _2.LTW.enums.SlotStatus;
 import _2.LTW.service.DoctorWorkService;
@@ -40,16 +41,29 @@ public class DoctorWorkController {
     ApiResponse<List<UserResponse>> getAvailableDoctor(
             @RequestParam LocalDate bookingDate,
             @RequestParam LocalTime startTime
-            ){
+    ){
 
         return ApiResponse.ok(doctorWorkService.getAvailableDoctors(bookingDate, startTime));
+
+    }
+
+    @GetMapping("/full-slots")
+    ApiResponse<List<SlotResponse>> getFullSlots(
+            @AuthenticationPrincipal CustomPrincipal principal,
+            @RequestParam LocalDate weekStart
+    ){
+
+        return ApiResponse.ok(doctorWorkService.getFullSlots(principal.getId(), weekStart).stream()
+                .map(s -> new SlotResponse(s.dayOfWeek(), s.shiftType()))
+                .toList());
 
     }
 
     @GetMapping
     ApiResponse<List<WeeklyScheduleResponse>> getWeeklySchedules(
             @RequestParam LocalDate weekStart,
-            @RequestParam(required = false) SlotStatus status) {
+            @RequestParam(required = false) SlotStatus status
+    ) {
 
         return ApiResponse.ok(doctorWorkService.getWeeklySchedules(weekStart, status));
 
@@ -59,7 +73,8 @@ public class DoctorWorkController {
     ApiResponse<WeeklyScheduleResponse> getWeeklyScheduleByDoctor(
             @PathVariable("id") Long doctorId,
             @RequestParam LocalDate weekStart,
-            @RequestParam(required = false) SlotStatus status) {
+            @RequestParam(required = false) SlotStatus status
+    ) {
 
         return ApiResponse.ok(doctorWorkService.getWeeklyScheduleByDoctor(doctorId, weekStart, status));
 
@@ -69,7 +84,8 @@ public class DoctorWorkController {
     ApiResponse<WeeklyScheduleResponse> getMyWeeklySchedule(
             @AuthenticationPrincipal CustomPrincipal principal,
             @RequestParam LocalDate weekStart,
-            @RequestParam(required = false) SlotStatus status) {
+            @RequestParam(required = false) SlotStatus status
+    ) {
 
         return ApiResponse.ok(doctorWorkService.getWeeklyScheduleByDoctor(principal.getId(), weekStart, status));
 

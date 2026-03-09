@@ -32,7 +32,11 @@ import java.time.LocalDateTime;
                 ),
                 @Index(
                         name = "idx_doctor_slot_status",
-                        columnList = "doctor_id, status"
+                        columnList = "doctor_id, slot_status"
+                ),
+                @Index(
+                        name = "idx_slot_capacity",
+                        columnList = "apply_from_week, day_of_week, shift_type, slot_status"
                 )
         }
 )
@@ -63,7 +67,7 @@ public class DoctorWork {
     LocalDate applyFromWeek;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status")
+    @Column(name = "slot_status")
     SlotStatus slotStatus = SlotStatus.PENDING;
 
     @CreationTimestamp

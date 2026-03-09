@@ -33,20 +33,11 @@ public class BookingDateTimeValidator {
         LocalDate currentMonday = today.with(DayOfWeek.MONDAY);
         LocalDate nextWeekMonday = currentMonday.plusWeeks(1);
 
-        boolean isBeforeOrEqualWednesday = today.getDayOfWeek().getValue() <= DayOfWeek.WEDNESDAY.getValue();
+        boolean isInCurrentWeek = isDateInWeek(bookingDate, currentMonday);
+        boolean isInNextWeek = isDateInWeek(bookingDate, nextWeekMonday);
 
-        if(isBeforeOrEqualWednesday){
-            if(!isDateInWeek(bookingDate, currentMonday)){
-                throw ErrorCode.BAD_REQUEST.toException("Chỉ được đặt lịch trong tuần này");
-            }
-        }
-        else{
-            boolean isInCurrentWeek = isDateInWeek(bookingDate, currentMonday);
-            boolean isInNextWeek = isDateInWeek(bookingDate, nextWeekMonday);
-
-            if(!isInCurrentWeek && !isInNextWeek){
-                throw ErrorCode.BAD_REQUEST.toException("Chỉ được đặt lịch trong tuần này hoặc tuần sau");
-            }
+        if(!isInCurrentWeek && !isInNextWeek){
+            throw ErrorCode.BAD_REQUEST.toException("Chỉ được đặt lịch trong tuần này hoặc tuần sau");
         }
 
     }

@@ -55,6 +55,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/roles").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/users/all").hasRole("ADMIN")
+                
+                .requestMatchers(HttpMethod.POST, "/medicines").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/medicines/{id}").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/medicines/{id}").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/treatment-methods").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/treatment-methods/{id}").hasRole("ADMIN")

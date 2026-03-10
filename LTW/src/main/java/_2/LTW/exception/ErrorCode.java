@@ -43,6 +43,11 @@ public enum ErrorCode {
 
     PET_NOT_FOUND(4101, "Không tìm thấy thú cưng", HttpStatus.NOT_FOUND),
     PET_OWNER_NOT_FOUND(4102, "Không tìm thấy chủ thú cưng", HttpStatus.NOT_FOUND),
+
+    // ========== Care Booking Errors (5xxx) ==========
+    CARE_BOOKING_NOT_FOUND(5001, "Không tìm thấy lịch đặt chăm sóc", HttpStatus.NOT_FOUND),
+    CARE_BOOKING_CANNOT_UPDATE(5002, "Không thể cập nhật lịch đặt đã xử lý", HttpStatus.BAD_REQUEST),
+    CARE_BOOKING_INVALID_STATUS(5003, "Trạng thái không hợp lệ", HttpStatus.BAD_REQUEST),
     ;
 
 

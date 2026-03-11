@@ -6,8 +6,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-
 @Repository
 public interface CareServiceRepository extends JpaRepository<CareService, Long> {
 
@@ -15,7 +13,7 @@ public interface CareServiceRepository extends JpaRepository<CareService, Long> 
     Page<CareService> findByIsActiveTrue(Pageable pageable);
 
     // Lấy danh sách dịch vụ theo loại pet
-    Page<CareService> findByPetTypeAndIsActiveTrue(CareService.PetType petType, Pageable pageable);
+    Page<CareService> findByPetTypesContainingAndIsActiveTrue(CareService.PetType petType, Pageable pageable);
 
     // Lấy tất cả dịch vụ (admin)
     Page<CareService> findAll(Pageable pageable);

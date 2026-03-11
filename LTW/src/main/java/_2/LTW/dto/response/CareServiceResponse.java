@@ -4,6 +4,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 @Data
 @Builder
@@ -22,7 +23,7 @@ public class CareServiceResponse {
 
     Integer durationMinutes;
 
-    String petType;
+    Set<String> petTypes;
 
     Boolean isActive;
 }

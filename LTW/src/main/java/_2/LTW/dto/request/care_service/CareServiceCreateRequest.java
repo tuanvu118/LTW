@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 @Data
 @NoArgsConstructor
@@ -29,6 +30,6 @@ public class CareServiceCreateRequest {
     @Min(value = 1, message = "Thời gian dịch vụ phải lớn hơn 0")
     Integer durationMinutes;
 
-    String petType; // DOG, CAT hoặc null (tất cả)
+    Set<String> petTypes; // CHO, MEO hoặc null/rỗng (tất cả)
 }
 

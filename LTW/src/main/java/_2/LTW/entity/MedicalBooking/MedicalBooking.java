@@ -1,5 +1,6 @@
 package _2.LTW.entity.MedicalBooking;
 
+import _2.LTW.entity.MedicalRecord.MedicalRecords;
 import _2.LTW.entity.Pets.Pets;
 import _2.LTW.entity.User;
 import jakarta.persistence.*;
@@ -35,7 +36,7 @@ public class MedicalBooking {
     @CreationTimestamp
     LocalDateTime createdAt;
 
-    @Column(name = " delete_at")
+    @Column(name = "delete_at")
     LocalDateTime deleteAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -49,5 +50,9 @@ public class MedicalBooking {
     @OneToMany(mappedBy = "medicalBooking", fetch = FetchType.LAZY, cascade = { CascadeType.DETACH, CascadeType.MERGE,
             CascadeType.PERSIST, CascadeType.REFRESH })
     List<MedicalBookingService> medicalBookingsService;
+
+    @OneToOne(mappedBy = "medicalBooking", fetch = FetchType.LAZY,
+            cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
+    MedicalRecords medicalRecord;
 
 }

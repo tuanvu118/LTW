@@ -24,6 +24,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -66,8 +67,6 @@ public class MedicalBookingAppService {
         booking.setDoctor(doctor);
         booking.setStatus(Status.BOOKED);
 
-        booking.setDeleteAt(null);
-
         List<MedicalBookingService> details = buildBookingDetails(request, booking, serviceMap);
         booking.setMedicalBookingsService(details);
 
@@ -78,8 +77,7 @@ public class MedicalBookingAppService {
     @PreAuthorize("hasRole('USER')")
     public List<MedicalBookingResponse> getMyBookings() {
         return medicalBookingMapper.toMedicalBookingResponses(
-                medicalBookingRepository.findAllByOwnerId(securityUtil.getCurrentUserId())
-        );
+                medicalBookingRepository.findAllByOwnerId(securityUtil.getCurrentUserId()));
     }
 
     @PreAuthorize("isAuthenticated()")
@@ -120,8 +118,7 @@ public class MedicalBookingAppService {
     @PreAuthorize("hasRole('DOCTOR')")
     public List<MedicalBookingResponse> getMyDoctorBookings() {
         return medicalBookingMapper.toMedicalBookingResponses(
-                medicalBookingRepository.findAllByDoctorId(securityUtil.getCurrentUserId())
-        );
+                medicalBookingRepository.findAllByDoctorId(securityUtil.getCurrentUserId()));
     }
 
     @PreAuthorize("hasRole('DOCTOR') or hasRole('ADMIN')")
@@ -147,16 +144,14 @@ public class MedicalBookingAppService {
     @PreAuthorize("hasRole('ADMIN')")
     public List<MedicalBookingResponse> getAllBookings(Long doctorId, Status status, LocalDate bookingDate) {
         return medicalBookingMapper.toMedicalBookingResponses(
-                medicalBookingRepository.search(doctorId, status, bookingDate)
-        );
+                medicalBookingRepository.search(doctorId, status, bookingDate));
     }
 
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public List<DoctorAvailabilityResponse> getAvailableDoctors(
             LocalDate bookingDate,
             LocalTime startTime,
-            List<Long> serviceIds
-    ) {
+            List<Long> serviceIds) {
         bookingDateTimeValidator.validate(bookingDate, startTime);
 
         List<MedicalService> services = medicalServiceRepository.findAllById(serviceIds);
@@ -171,18 +166,17 @@ public class MedicalBookingAppService {
         LocalTime estimatedEndTime = startTime.plusMinutes(totalDuration);
         validateWithinSingleShift(startTime, estimatedEndTime);
 
+        LocalDate weekStart = bookingDate.with(DayOfWeek.MONDAY);
         int dayOfWeek = bookingDate.getDayOfWeek().getValue();
         ShiftType shiftType = calculateShiftType(startTime);
 
-        List<DoctorWork> works = doctorWorkRepository.findAvailableDoctors(
-                bookingDate,
+        List<User> works = doctorWorkRepository.findAvailableDoctors(
+                weekStart,
                 dayOfWeek,
                 shiftType,
-                SlotStatus.APPROVED
-        );
+                SlotStatus.APPROVED);
 
         return works.stream()
-                .map(DoctorWork::getDoctor)
                 .distinct()
                 .filter(doctor -> isDoctorFree(doctor.getId(), bookingDate, startTime, estimatedEndTime))
                 .map(doctor -> DoctorAvailabilityResponse.builder()
@@ -241,8 +235,7 @@ public class MedicalBookingAppService {
 
     private int calculateTotalDuration(
             List<CreateMedicalBookingServiceItemRequest> items,
-            Map<Long, MedicalService> serviceMap
-    ) {
+            Map<Long, MedicalService> serviceMap) {
         return items.stream()
                 .mapToInt(item -> serviceMap.get(item.getMedicalServiceId()).getTimeDuration())
                 .sum();
@@ -251,26 +244,16 @@ public class MedicalBookingAppService {
     private List<MedicalBookingService> buildBookingDetails(
             CreateMedicalBookingRequest request,
             MedicalBooking booking,
-            Map<Long, MedicalService> serviceMap
-    ) {
+            Map<Long, MedicalService> serviceMap) {
         return request.getServices().stream()
-                .map(medicalBookingMapper::toMedicalBookingService)
-                .peek(detail -> {
-                    Long medicalServiceId = request.getServices()
-                            .get(request.getServices().indexOf(
-                                    request.getServices().stream()
-                                            .filter(item -> item.getNotes() == null
-                                                    ? detail.getNotes() == null
-                                                    : item.getNotes().equals(detail.getNotes()))
-                                            .findFirst()
-                                            .orElseThrow()
-                            ))
-                            .getMedicalServiceId();
-
+                .map(item -> {
+                    MedicalBookingService detail = medicalBookingMapper.toMedicalBookingService(item);
+                    Long medicalServiceId = item.getMedicalServiceId();
                     MedicalService master = serviceMap.get(medicalServiceId);
                     detail.setMedicalBooking(booking);
                     detail.setMedicalService(master);
                     detail.setTimeDuration(master.getTimeDuration());
+                    return detail;
                 })
                 .toList();
     }
@@ -285,15 +268,15 @@ public class MedicalBookingAppService {
     }
 
     private void ensureDoctorHasApprovedShift(Long doctorId, LocalDate bookingDate, LocalTime startTime) {
+        LocalDate weekStart = bookingDate.with(DayOfWeek.MONDAY);
         int dayOfWeek = bookingDate.getDayOfWeek().getValue();
         ShiftType shiftType = calculateShiftType(startTime);
 
         boolean hasApprovedShift = doctorWorkRepository.findAvailableDoctors(
-                bookingDate,
+                weekStart,
                 dayOfWeek,
                 shiftType,
-                SlotStatus.APPROVED
-        ).stream().anyMatch(work -> work.getDoctor().getId().equals(doctorId));
+                SlotStatus.APPROVED).stream().anyMatch(doctor -> doctor.getId().equals(doctorId));
 
         if (!hasApprovedShift) {
             throw ErrorCode.BAD_REQUEST.toException("Bác sĩ không có lịch làm việc hợp lệ ở thời điểm này");
@@ -304,18 +287,14 @@ public class MedicalBookingAppService {
             Long doctorId,
             LocalDate bookingDate,
             LocalTime newStart,
-            LocalTime newEnd
-    ) {
+            LocalTime newEnd) {
         List<MedicalBooking> bookings = medicalBookingRepository.findDoctorBookingsInDate(
                 doctorId,
                 bookingDate,
-                List.of(Status.BOOKED)
-        );
+                List.of(Status.BOOKED));
 
-        boolean overlapped = bookings.stream().anyMatch(existing ->
-                existing.getStartTime().isBefore(newEnd)
-                        && medicalBookingMapper.toEstimatedEndTime(existing).isAfter(newStart)
-        );
+        boolean overlapped = bookings.stream().anyMatch(existing -> existing.getStartTime().isBefore(newEnd)
+                && medicalBookingMapper.toEstimatedEndTime(existing).isAfter(newStart));
 
         if (overlapped) {
             throw ErrorCode.CONFLICT.toException("Bác sĩ đã bận trong khoảng thời gian này");
@@ -326,11 +305,9 @@ public class MedicalBookingAppService {
         return medicalBookingRepository.findDoctorBookingsInDate(
                 doctorId,
                 bookingDate,
-                List.of(Status.BOOKED)
-        ).stream().noneMatch(existing ->
-                existing.getStartTime().isBefore(newEnd)
-                        && medicalBookingMapper.toEstimatedEndTime(existing).isAfter(newStart)
-        );
+                List.of(Status.BOOKED)).stream().noneMatch(
+                        existing -> existing.getStartTime().isBefore(newEnd)
+                                && medicalBookingMapper.toEstimatedEndTime(existing).isAfter(newStart));
     }
 
     private ShiftType calculateShiftType(LocalTime startTime) {

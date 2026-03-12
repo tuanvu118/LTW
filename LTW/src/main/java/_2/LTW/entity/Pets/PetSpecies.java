@@ -1,5 +1,5 @@
 package _2.LTW.entity.Pets;
 
 public enum PetSpecies {
-    Chó, Mèo
+    Dog,Cat
 }

@@ -3,6 +3,9 @@ package _2.LTW.dto.request;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import jakarta.validation.constraints.*;
+
+import java.math.BigDecimal;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -15,6 +18,6 @@ public class TreatmentMethodsRequest {
 
     @NotNull(message = "Giá phương pháp điều trị không được để trống")
     @Positive(message = "Giá phương pháp điều trị phải lớn hơn 0")
-    Integer price;
+    BigDecimal price;
 
 }

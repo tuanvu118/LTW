@@ -7,6 +7,8 @@ import jakarta.validation.constraints.Positive;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,7 +20,7 @@ public class MedicineRequest {
 
     @NotNull(message = "Không được để trống giá thuốc")
     @Positive(message = "Giá thuốc phải lớn hơn 0")
-    Double price;
+    BigDecimal price;
 
     String usageInstruction;
 }

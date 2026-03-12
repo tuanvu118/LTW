@@ -14,44 +14,46 @@ import _2.LTW.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class PetsServiceImpl implements  PetService {
+public class PetsServiceImpl implements PetService {
     private final PetRepository petsRepository;
     private final UserRepository userRepository;
     private final PetMapper petMapper;
     private final CloudinaryService cloudinaryService;
     private final SecurityUtil securityUtil;
+
     private boolean isAdminOrDoctor() {
         return securityUtil.isAdmin() || securityUtil.isDoctor();
     }
 
     private void assertOwnerOrAdminDoctor(Long ownerId) {
-        if (isAdminOrDoctor()) return;
+        if (isAdminOrDoctor()) {
+            return;
+        }
 
         if (!securityUtil.isOwner(ownerId)) {
-            throw ErrorCode.UNAUTHORIZED.toException("Bạn không có quyền thao tác thú cưng này");
+            throw ErrorCode.UNAUTHORIZED.toException("Ban khong co quyen thao tac thu cung nay");
         }
     }
 
     @Override
     @Transactional
     public PetResponse create(PetCreateRequest request) {
-        User owner = userRepository.findById(request.getOwner_id())
+        Long ownerId = resolveOwnerIdForCreate(request);
+
+        User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> ErrorCode.USER_NOT_FOUND.toException(
-                        "Không tìm thấy user id=" + request.getOwner_id()
+                        "Khong tim thay user id=" + ownerId
                 ));
 
-        Pets pet = petMapper.toEntity(request,owner);
+        Pets pet = petMapper.toEntity(request, owner);
         pet.setUser(owner);
 
         if (request.getImg_url() != null && !request.getImg_url().isEmpty()) {
@@ -64,16 +66,29 @@ public class PetsServiceImpl implements  PetService {
         return petMapper.toResponse(saved);
     }
 
+    private Long resolveOwnerIdForCreate(PetCreateRequest request) {
+        Long currentUserId = securityUtil.getCurrentUserId();
+        Long requestOwnerId = request.getOwner_id();
+
+        if (isAdminOrDoctor()) {
+            return requestOwnerId != null ? requestOwnerId : currentUserId;
+        }
+
+        if (requestOwnerId != null && !requestOwnerId.equals(currentUserId)) {
+            throw ErrorCode.UNAUTHORIZED.toException("Ban khong co quyen tao pet cho nguoi dung khac");
+        }
+
+        return currentUserId;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public PetResponse getById(Integer id) {
         Pets pet = petsRepository.findActiveById(id)
-                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Không tìm thấy pet id=" + id));
+                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Khong tim thay pet id=" + id));
         assertOwnerOrAdminDoctor(pet.getUser().getId());
         return petMapper.toResponse(pet);
     }
-
-
 
     @Override
     @Transactional(readOnly = true)
@@ -85,10 +100,11 @@ public class PetsServiceImpl implements  PetService {
 
             return page.map(petMapper::toResponse);
         }
+
         Long me = securityUtil.getCurrentUserId();
 
         if (ownerId != null && !ownerId.equals(me)) {
-            throw ErrorCode.UNAUTHORIZED.toException("Bạn không có quyền xem thú cưng của người khác");
+            throw ErrorCode.UNAUTHORIZED.toException("Ban khong co quyen xem thu cung cua nguoi khac");
         }
 
         return petsRepository.findActiveByOwnerId(me, pageable)
@@ -99,7 +115,7 @@ public class PetsServiceImpl implements  PetService {
     @Transactional
     public PetResponse update(Integer id, PetUpdateRequest request) {
         Pets pet = petsRepository.findActiveById(id)
-                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Không tìm thấy pet id=" + id));
+                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Khong tim thay pet id=" + id));
         assertOwnerOrAdminDoctor(pet.getUser().getId());
 
         petMapper.updateEntity(pet, request);
@@ -118,10 +134,9 @@ public class PetsServiceImpl implements  PetService {
     @Transactional
     public void delete(Integer id) {
         Pets pet = petsRepository.findActiveById(id)
-                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Không tìm thấy pet id=" + id));
+                .orElseThrow(() -> ErrorCode.NOT_FOUND.toException("Khong tim thay pet id=" + id));
         assertOwnerOrAdminDoctor(pet.getUser().getId());
         pet.setDelete_at(LocalDateTime.now());
         petsRepository.save(pet);
     }
-
 }

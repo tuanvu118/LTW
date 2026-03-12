@@ -1,14 +1,15 @@
 package _2.LTW.entity.Pets;
 
+import _2.LTW.entity.MedicalBooking.MedicalBooking;
 import _2.LTW.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.CreationTimestamp;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Getter
@@ -58,4 +59,8 @@ public class Pets {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
     User user;
+
+    @OneToMany(mappedBy = "pets", fetch = FetchType.LAZY,
+            cascade = {CascadeType.DETACH,CascadeType.MERGE,CascadeType.PERSIST, CascadeType.REFRESH})
+    List<MedicalBooking> medicalBookings;
 }

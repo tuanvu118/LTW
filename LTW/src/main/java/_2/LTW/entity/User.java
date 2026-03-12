@@ -1,5 +1,6 @@
 package _2.LTW.entity;
 
+import _2.LTW.entity.MedicalBooking.MedicalBooking;
 import _2.LTW.entity.Pets.Pets;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -45,5 +46,10 @@ public class User {
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY,
             cascade = {CascadeType.DETACH,CascadeType.MERGE,CascadeType.PERSIST, CascadeType.REFRESH})
     List<Pets> pets;
+
+    @OneToMany(mappedBy = "doctor",fetch = FetchType.LAZY,
+            cascade = {CascadeType.DETACH,CascadeType.MERGE,CascadeType.PERSIST, CascadeType.REFRESH})
+    List<MedicalBooking>  medicalBookings;
+
 
 }

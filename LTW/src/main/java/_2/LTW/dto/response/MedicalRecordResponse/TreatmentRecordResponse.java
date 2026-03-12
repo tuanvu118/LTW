@@ -1,4 +1,4 @@
-package _2.LTW.dto.response;
+package _2.LTW.dto.response.MedicalRecordResponse;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -10,11 +10,9 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class TreatmentMethodsResponse {
+public class TreatmentRecordResponse {
     Long id;
-
-    String name;
-
+    Long treatmentMethodId;
+    String treatmentMethodName;
     BigDecimal price;
-    
 }

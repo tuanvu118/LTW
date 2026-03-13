@@ -1,7 +1,7 @@
 package _2.LTW.service;
 
-import _2.LTW.dto.request.care_service.CareServiceCreateRequest;
-import _2.LTW.dto.request.care_service.CareServiceUpdateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceCreateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceUpdateRequest;
 import _2.LTW.dto.response.CareServiceResponse;
 import _2.LTW.entity.CareService;
 import _2.LTW.exception.AppException;
@@ -9,10 +9,10 @@ import _2.LTW.exception.ErrorCode;
 import _2.LTW.mapper.CareServiceMapper;
 import _2.LTW.repository.CareServiceRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -41,9 +41,9 @@ public class CareServiceService {
      * GET /care-services - Lấy danh sách dịch vụ (authen)
      */
     @Transactional(readOnly = true)
-    public Page<CareServiceResponse> getAllServices(Pageable pageable) {
-        Page<CareService> services = careServiceRepository.findByIsActiveTrue(pageable);
-        return services.map(careServiceMapper::toResponse);
+    public List<CareServiceResponse> getAllServices() {
+        List<CareService> services = careServiceRepository.findByIsActiveTrue();
+        return careServiceMapper.toResponseList(services);
     }
 
     /**
@@ -98,4 +98,3 @@ public class CareServiceService {
         careServiceRepository.delete(careService);
     }
 }
-

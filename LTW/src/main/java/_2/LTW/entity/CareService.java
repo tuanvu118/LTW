@@ -44,8 +44,8 @@ public class CareService {
     Boolean isActive = true;
 
     public enum PetType {
-        CHO,
-        MEO
+        DOG,
+        CAT
     }
 }
 

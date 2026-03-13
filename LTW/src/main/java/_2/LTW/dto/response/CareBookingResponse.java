@@ -1,11 +1,13 @@
 package _2.LTW.dto.response;
 
+import _2.LTW.entity.CareBooking.CareBookingStatus;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -15,18 +17,21 @@ import java.time.LocalTime;
 public class CareBookingResponse {
 
     Long id;
+    Integer petId;
+    String petName;
 
-    PetResponse pet;
-
-    UserResponse doctor;
+    Long doctorId;
+    String doctorName;
 
     LocalDate bookingDate;
-
     LocalTime startTime;
+    LocalTime estimatedEndTime;
+    Integer totalDuration;
 
     String notes;
-
-    String status;
-
+    CareBookingStatus status;
     LocalDateTime createdAt;
+
+    List<CareBookingServiceItemResponse> services;
 }
+

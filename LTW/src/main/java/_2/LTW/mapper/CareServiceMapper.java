@@ -1,7 +1,7 @@
 package _2.LTW.mapper;
 
-import _2.LTW.dto.request.care_service.CareServiceCreateRequest;
-import _2.LTW.dto.request.care_service.CareServiceUpdateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceCreateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceUpdateRequest;
 import _2.LTW.dto.response.CareServiceResponse;
 import _2.LTW.entity.CareService;
 import org.mapstruct.*;

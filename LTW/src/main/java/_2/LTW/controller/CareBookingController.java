@@ -1,15 +1,13 @@
 package _2.LTW.controller;
 
 import _2.LTW.dto.request.ApiResponse;
-import _2.LTW.dto.request.care_booking.CareBookingCreateRequest;
-import _2.LTW.dto.request.care_booking.CareBookingStatusUpdateRequest;
-import _2.LTW.dto.request.care_booking.CareBookingUpdateRequest;
+import _2.LTW.dto.request.CareBookingRequest.CareBookingCreateRequest;
+import _2.LTW.dto.request.CareBookingRequest.CareBookingStatusUpdateRequest;
+import _2.LTW.dto.request.CareBookingRequest.CareBookingUpdateRequest;
 import _2.LTW.dto.response.CareBookingResponse;
 import _2.LTW.service.CareBookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("")
@@ -25,106 +24,93 @@ public class CareBookingController {
 
     private final CareBookingService careBookingService;
 
-    /**
-     * POST /care-bookings - Đặt lịch dịch vụ (authen)
-     */
     @PostMapping("/care-bookings")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<CareBookingResponse>> createBooking(
             @Valid @RequestBody CareBookingCreateRequest request) {
         CareBookingResponse response = careBookingService.createBooking(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(response, "Đặt lịch thành công"));
+                .body(ApiResponse.ok(response, "Đặt lịch dịch vụ thành công"));
     }
 
-    /**
-     * GET /care-bookings/my - Lấy danh sách booking của tôi (authen)
-     */
-    @GetMapping("/care-bookings/my")
-    public ResponseEntity<ApiResponse<Page<CareBookingResponse>>> getMyBookings(Pageable pageable) {
-        Page<CareBookingResponse> response = careBookingService.getMyBookings(pageable);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Lấy danh sách booking thành công"));
+    @GetMapping("/care-bookings/my-care-services")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<CareBookingResponse>>> getMyBookings() {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.getMyBookings(),
+                "Lấy danh sách booking của tôi thành công"
+        ));
     }
 
-    /**
-     * GET /care-bookings/my/{id} - Xem chi tiết booking (authen)
-     */
-    @GetMapping("/care-bookings/my/{id}")
-    public ResponseEntity<ApiResponse<CareBookingResponse>> getBookingDetail(@PathVariable Long id) {
-        CareBookingResponse response = careBookingService.getBookingDetail(id);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Lấy chi tiết booking thành công"));
+    @GetMapping("/care-bookings/my-care-services/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<CareBookingResponse>> getMyBookingDetail(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.getMyBookingDetail(id),
+                "Lấy chi tiết booking thành công"
+        ));
     }
 
-    /**
-     * PATCH /care-bookings/{id} - Cập nhật booking (chỉ được hủy nếu chưa xử lý) (authen)
-     */
-    @PatchMapping("/care-bookings/{id}")
-    public ResponseEntity<ApiResponse<CareBookingResponse>> updateBooking(
-            @PathVariable Long id,
-            @Valid @RequestBody CareBookingUpdateRequest request) {
-        CareBookingResponse response = careBookingService.updateBooking(id, request);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Cập nhật booking thành công"));
+    @PatchMapping("/care-bookings/my-care-services/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<CareBookingResponse>> cancelMyBooking(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.cancelMyBooking(id),
+                "Hủy booking thành công"
+        ));
     }
 
-    /**
-     * GET /care-bookings-doctors/ - Lấy danh sách booking thuộc về bác sĩ (lọc theo ngày, trạng thái) (Bác sĩ)
-     */
     @GetMapping("/care-bookings-doctors")
-    @PreAuthorize("hasRole('DOCTOR') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Page<CareBookingResponse>>> getDoctorBookings(
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<ApiResponse<List<CareBookingResponse>>> getDoctorBookings(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) String status,
-            Pageable pageable) {
-        Page<CareBookingResponse> response = careBookingService.getDoctorBookings(date, status, pageable);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Lấy danh sách booking của bác sĩ thành công"));
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.getDoctorBookings(date, status),
+                "Lấy danh sách booking thuộc về bác sĩ thành công"
+        ));
     }
 
-    /**
-     * GET /care-bookings-doctors/{id} - Xem chi tiết booking thuộc về bác sĩ (Bác sĩ)
-     */
     @GetMapping("/care-bookings-doctors/{id}")
-    @PreAuthorize("hasRole('DOCTOR') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('DOCTOR')")
     public ResponseEntity<ApiResponse<CareBookingResponse>> getDoctorBookingDetail(@PathVariable Long id) {
-        CareBookingResponse response = careBookingService.getDoctorBookingDetail(id);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Lấy chi tiết booking thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.getDoctorBookingDetail(id),
+                "Lấy chi tiết booking thuộc về bác sĩ thành công"
+        ));
     }
 
-    /**
-     * PATCH /care-bookings-doctors/{id} - Cập nhật trạng thái booking (confirmed, in_progress, completed) (Bác sĩ)
-     */
     @PatchMapping("/care-bookings-doctors/{id}")
-    @PreAuthorize("hasRole('DOCTOR') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CareBookingResponse>> updateBookingStatus(
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<ApiResponse<CareBookingResponse>> updateDoctorBookingStatus(
             @PathVariable Long id,
             @Valid @RequestBody CareBookingStatusUpdateRequest request) {
-        CareBookingResponse response = careBookingService.updateBookingStatus(id, request.getStatus());
-        return ResponseEntity.ok(ApiResponse.ok(response, "Cập nhật trạng thái booking thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.updateDoctorBookingStatus(id, request.getStatus()),
+                "Cập nhật trạng thái booking thành công"
+        ));
     }
 
-    /**
-     * GET /care-bookings - Lấy toàn bộ booking của mọi bác sĩ (admin)
-     */
     @GetMapping("/care-bookings")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Page<CareBookingResponse>>> getAllBookings(Pageable pageable) {
-        Page<CareBookingResponse> response = careBookingService.getAllBookings(pageable);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Lấy tất cả booking thành công"));
+    public ResponseEntity<ApiResponse<List<CareBookingResponse>>> getAllBookings() {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.getAllBookings(),
+                "Lấy toàn bộ booking của mọi bác sĩ thành công"
+        ));
     }
 
-    /**
-     * PATCH /care-bookings/{id} (admin) - Cập nhật thông tin booking (admin)
-     */
-    @PatchMapping("/care-bookings/admin/{id}")
+    @PatchMapping("/care-bookings/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CareBookingResponse>> adminUpdateBooking(
             @PathVariable Long id,
-            @Valid @RequestBody CareBookingUpdateRequest request) {
-        CareBookingResponse response = careBookingService.adminUpdateBooking(id, request);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Cập nhật booking thành công"));
+            @RequestBody CareBookingUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                careBookingService.adminUpdateBooking(id, request),
+                "Cập nhật thông tin booking thành công"
+        ));
     }
 
-    /**
-     * DELETE /care-bookings/{id} - Xóa booking (admin)
-     */
     @DeleteMapping("/care-bookings/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteBooking(@PathVariable Long id) {
@@ -132,4 +118,3 @@ public class CareBookingController {
         return ResponseEntity.ok(ApiResponse.ok(null, "Xóa booking thành công"));
     }
 }
-

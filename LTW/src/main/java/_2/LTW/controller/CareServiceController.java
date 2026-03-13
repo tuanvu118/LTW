@@ -1,18 +1,18 @@
 package _2.LTW.controller;
 
 import _2.LTW.dto.request.ApiResponse;
-import _2.LTW.dto.request.care_service.CareServiceCreateRequest;
-import _2.LTW.dto.request.care_service.CareServiceUpdateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceCreateRequest;
+import _2.LTW.dto.request.CareServiceRequest.CareServiceUpdateRequest;
 import _2.LTW.dto.response.CareServiceResponse;
 import _2.LTW.service.CareServiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/care-services")
@@ -37,8 +37,8 @@ public class CareServiceController {
      * GET /care-services - Lấy danh sách dịch vụ (authen)
      */
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<CareServiceResponse>>> getAllServices(Pageable pageable) {
-        Page<CareServiceResponse> response = careServiceService.getAllServices(pageable);
+    public ResponseEntity<ApiResponse<List<CareServiceResponse>>> getAllServices() {
+        List<CareServiceResponse> response = careServiceService.getAllServices();
         return ResponseEntity.ok(ApiResponse.ok(response, "Lấy danh sách dịch vụ thành công"));
     }
 
@@ -83,4 +83,3 @@ public class CareServiceController {
         return ResponseEntity.ok(ApiResponse.ok(null, "Xóa dịch vụ thành công"));
     }
 }
-

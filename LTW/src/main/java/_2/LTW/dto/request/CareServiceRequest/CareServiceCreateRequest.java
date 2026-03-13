@@ -1,4 +1,4 @@
-package _2.LTW.dto.request.care_service;
+package _2.LTW.dto.request.CareServiceRequest;
 
 import jakarta.validation.constraints.*;
 import lombok.AccessLevel;

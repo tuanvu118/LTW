@@ -1,6 +1,7 @@
 package _2.LTW.repository;
 
 import _2.LTW.entity.CareService;
+import _2.LTW.entity.Pets.PetSpecies;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,7 +14,7 @@ public interface CareServiceRepository extends JpaRepository<CareService, Long> 
     List<CareService> findByIsActiveTrue();
 
     // Lấy danh sách dịch vụ theo loại pet
-    List<CareService> findByPetTypesContainingAndIsActiveTrue(CareService.PetType petType);
+    List<CareService> findBySpeciesContainingAndIsActiveTrue(PetSpecies species);
 
     // Kiểm tra tên dịch vụ đã tồn tại
     boolean existsByName(String name);

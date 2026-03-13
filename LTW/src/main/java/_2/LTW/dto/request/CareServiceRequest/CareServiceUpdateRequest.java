@@ -27,6 +27,6 @@ public class CareServiceUpdateRequest {
     @Min(value = 1, message = "Thời gian dịch vụ phải lớn hơn 0")
     Integer durationMinutes;
 
-    Set<String> petTypes;
+    Set<String> species;
 }
 

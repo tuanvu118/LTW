@@ -1,5 +1,6 @@
 package _2.LTW.entity;
 
+import _2.LTW.entity.Pets.PetSpecies;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -33,19 +34,14 @@ public class CareService {
     @Column(name = "duration_minutes", nullable = false)
     Integer durationMinutes;
 
-    @ElementCollection(targetClass = PetType.class)
-    @CollectionTable(name = "care_service_pet_types", joinColumns = @JoinColumn(name = "care_service_id"))
+    @ElementCollection(targetClass = PetSpecies.class)
+    @CollectionTable(name = "care_service_species", joinColumns = @JoinColumn(name = "care_service_id"))
     @Enumerated(EnumType.STRING)
-    @Column(name = "pet_type")
-    Set<PetType> petTypes;
+    @Column(name = "species")
+    Set<PetSpecies> species;
 
     @Column(name = "is_active")
     @Builder.Default
     Boolean isActive = true;
-
-    public enum PetType {
-        DOG,
-        CAT
-    }
 }
 

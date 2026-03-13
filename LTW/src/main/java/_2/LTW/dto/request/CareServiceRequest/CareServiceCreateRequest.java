@@ -30,6 +30,6 @@ public class CareServiceCreateRequest {
     @Min(value = 1, message = "Thời gian dịch vụ phải lớn hơn 0")
     Integer durationMinutes;
 
-    Set<String> petTypes; // CHO, MEO hoặc null/rỗng (tất cả)
+    Set<String> species; // Dog, Cat hoặc null/rỗng (tất cả)
 }
 

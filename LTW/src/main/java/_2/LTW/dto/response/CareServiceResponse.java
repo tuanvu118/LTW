@@ -23,7 +23,7 @@ public class CareServiceResponse {
 
     Integer durationMinutes;
 
-    Set<String> petTypes;
+    Set<String> species;
 
     Boolean isActive;
 }

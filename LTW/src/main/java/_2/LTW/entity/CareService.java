@@ -1,13 +1,10 @@
 package _2.LTW.entity;
 
-import _2.LTW.entity.Pets.PetSpecies;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
-import java.util.Set;
-
 @Entity
 @Table(name = "care_services")
 @Getter
@@ -34,11 +31,8 @@ public class CareService {
     @Column(name = "duration_minutes", nullable = false)
     Integer durationMinutes;
 
-    @ElementCollection(targetClass = PetSpecies.class)
-    @CollectionTable(name = "care_service_species", joinColumns = @JoinColumn(name = "care_service_id"))
-    @Enumerated(EnumType.STRING)
-    @Column(name = "species")
-    Set<PetSpecies> species;
+    @Column(name = "species", length = 100)
+    String species;
 
     @Column(name = "is_active")
     @Builder.Default

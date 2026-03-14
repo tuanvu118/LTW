@@ -4,9 +4,9 @@ import _2.LTW.dto.request.CareServiceRequest.CareServiceCreateRequest;
 import _2.LTW.dto.request.CareServiceRequest.CareServiceUpdateRequest;
 import _2.LTW.dto.response.CareServiceResponse;
 import _2.LTW.entity.CareService;
-import _2.LTW.entity.Pets.PetSpecies;
 import org.mapstruct.*;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -17,46 +17,49 @@ public interface CareServiceMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "isActive", constant = "true")
-    @Mapping(target = "species", expression = "java(mapSpecies(request.getSpecies()))")
+    @Mapping(target = "species", expression = "java(toSpeciesColumn(request.getSpecies()))")
     CareService toEntity(CareServiceCreateRequest request);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "isActive", ignore = true)
-    @Mapping(target = "species", expression = "java(request.getSpecies() != null ? mapSpecies(request.getSpecies()) : careService.getSpecies())")
+    @Mapping(target = "species", expression = "java(request.getSpecies() != null ? toSpeciesColumn(request.getSpecies()) : careService.getSpecies())")
     void updateEntity(@MappingTarget CareService careService, CareServiceUpdateRequest request);
 
-    @Mapping(target = "species", expression = "java(mapSpeciesNames(careService.getSpecies()))")
+    @Mapping(target = "species", expression = "java(toSpeciesSet(careService.getSpecies()))")
     CareServiceResponse toResponse(CareService careService);
 
     List<CareServiceResponse> toResponseList(List<CareService> careServices);
 
-    default Set<PetSpecies> mapSpecies(Set<String> species) {
+    default String toSpeciesColumn(Set<String> species) {
         if (species == null || species.isEmpty()) {
             return null;
         }
 
         return species.stream()
                 .filter(item -> item != null && !item.isBlank())
-                .map(this::toPetSpecies)
-                .collect(Collectors.toSet());
+                .map(CareServiceMapper::normalizeSpeciesToken)
+                .distinct()
+                .sorted()
+                .collect(Collectors.joining(","));
     }
 
-    default Set<String> mapSpeciesNames(Set<PetSpecies> species) {
-        if (species == null || species.isEmpty()) {
+    default Set<String> toSpeciesSet(String species) {
+        if (species == null || species.isBlank()) {
             return null;
         }
 
-        return species.stream()
-                .map(Enum::name)
+        return Arrays.stream(species.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
                 .collect(Collectors.toSet());
     }
 
-    default PetSpecies toPetSpecies(String raw) {
+    private static String normalizeSpeciesToken(String raw) {
         String normalized = raw.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "dog" -> PetSpecies.Dog;
-            case "cat" -> PetSpecies.Cat;
+            case "dog" -> "Dog";
+            case "cat" -> "Cat";
             default -> throw new IllegalArgumentException("Species không hợp lệ: " + raw);
         };
     }

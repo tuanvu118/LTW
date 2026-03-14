@@ -47,8 +47,7 @@ public class CareBookingService {
     public CareBookingResponse createBooking(CareBookingCreateRequest request) {
         bookingDateTimeValidator.validate(request.getBookingDate(), request.getStartTime());
 
-        Pets pet = petRepository.findActiveById(request.getPetId())
-                .orElseThrow(() -> ErrorCode.PET_NOT_FOUND.toException("Không tìm thấy thú cưng"));
+        Pets pet = getPetAndValidateOwner(request.getPetId());
         User doctor = getDoctorAndValidateRole(request.getDoctorId());
 
         Map<Long, CareService> serviceMap = getCareServiceMap(request.getServices());
@@ -209,6 +208,17 @@ public class CareBookingService {
     private CareBooking getBookingOrThrow(Long bookingId) {
         return careBookingRepository.findDetailById(bookingId)
                 .orElseThrow(() -> ErrorCode.CARE_BOOKING_NOT_FOUND.toException());
+    }
+
+    private Pets getPetAndValidateOwner(Integer petId) {
+        Pets pet = petRepository.findActiveById(petId)
+                .orElseThrow(() -> ErrorCode.PET_NOT_FOUND.toException("Không tìm thấy thú cưng"));
+
+        if (!pet.getUser().getId().equals(securityUtil.getCurrentUserId())) {
+            throw ErrorCode.UNAUTHORIZED.toException("Bạn chỉ có thể đặt lịch cho thú cưng của mình");
+        }
+
+        return pet;
     }
 
     private User getDoctorAndValidateRole(Long doctorId) {

@@ -1,5 +1,6 @@
 package _2.LTW.entity.CareBooking;
 
+import _2.LTW.entity.CareRecord.CareRecord;
 import _2.LTW.entity.Pets.Pets;
 import _2.LTW.entity.User;
 import jakarta.persistence.*;
@@ -60,4 +61,8 @@ public class CareBooking {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     User createdBy;
+
+    @OneToOne(mappedBy = "careBooking", fetch = FetchType.LAZY,
+            cascade = {CascadeType.DETACH, CascadeType.MERGE, CascadeType.PERSIST, CascadeType.REFRESH})
+    CareRecord careRecord;
 }

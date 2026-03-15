@@ -6,6 +6,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.http.ResponseEntity;
 import _2.LTW.service.UserService;
 import _2.LTW.dto.request.UserRequest;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -24,6 +25,7 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserResponse>> getAllUser() {
         return ResponseEntity.ok(userService.getAllUser());
     }

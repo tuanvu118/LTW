@@ -30,7 +30,17 @@ public class UserService {
 
     public List<UserResponse> getAllUser() {
         List<User> users = userRepository.findAll();
-        return userMapper.toUserResponses(users);
+        return users.stream()
+                .map(user -> {
+                    UserResponse response = userMapper.toUserResponse(user);
+                    response.setRoles(
+                            userRoleRepository.findByUser_Id(user.getId()).stream()
+                                    .map(UserRole::getRole)
+                                    .toList()
+                    );
+                    return response;
+                })
+                .toList();
     }
 
     public UserResponse getMe() {

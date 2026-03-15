@@ -32,7 +32,11 @@ public enum ErrorCode {
     INVALID_TOKEN(2003, "Token không hợp lệ", HttpStatus.UNAUTHORIZED),
     TOKEN_EXPIRED(2004, "Token đã hết hạn", HttpStatus.UNAUTHORIZED),
     INVALID_CREDENTIALS(2005, "Thông tin đăng nhập không đúng", HttpStatus.UNAUTHORIZED),
-
+    INVALID_REFRESH_TOKEN(2006, "Token refresh không hợp lệ", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_EXPIRED(2007, "Token refresh đã hết hạn", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_USED(2008, "Token refresh đã được sử dụng", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_NOT_FOUND(2009, "Token refresh không tồn tại", HttpStatus.UNAUTHORIZED),
+    
     // ========== User Errors (3xxx) ==========
     USER_NOT_FOUND(3001, "Không tìm thấy người dùng", HttpStatus.NOT_FOUND),
     USER_ALREADY_EXISTS(3002, "Người dùng đã tồn tại", HttpStatus.CONFLICT),
@@ -49,6 +53,8 @@ public enum ErrorCode {
     CARE_BOOKING_CANNOT_UPDATE(5002, "Không thể cập nhật lịch đặt đã xử lý", HttpStatus.BAD_REQUEST),
     CARE_BOOKING_INVALID_STATUS(5003, "Trạng thái không hợp lệ", HttpStatus.BAD_REQUEST),
     ;
+
+
 
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

@@ -8,11 +8,16 @@ import _2.LTW.entity.UserRole;
 import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.dto.request.LoginRequest;
 import _2.LTW.dto.response.LoginResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import java.util.stream.Collectors;
 
@@ -45,7 +50,31 @@ public class AuthController {
     }
     
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody LoginRequest loginRequest) {
-        return authService.login(loginRequest);
+    public LoginResponse login(@RequestBody LoginRequest loginRequest, HttpServletResponse response) {
+        LoginResponse loginResponse = authService.login(loginRequest);
+        addRefreshTokenCookie(response, loginResponse.getRefreshTokenRaw());
+        loginResponse.setRefreshTokenRaw(null);
+        return loginResponse;
+    }
+    
+    // Refresh Token
+    @PostMapping("/refresh")
+    public LoginResponse refreshToken(
+        @CookieValue(name = "refresh_token", required = false)
+        String refreshToken,
+        HttpServletResponse response) {
+            LoginResponse loginResponse = authService.refresh(refreshToken);
+            addRefreshTokenCookie(response, loginResponse.getRefreshTokenRaw());
+            loginResponse.setRefreshTokenRaw(null);
+            return loginResponse;
+    }
+    
+    private void addRefreshTokenCookie(HttpServletResponse response, String refreshTokenRaw) {
+        ResponseCookie cookie = ResponseCookie.from("refresh_token", refreshTokenRaw)
+                .httpOnly(true)
+                .secure(true)
+                .maxAge(7 * 24 * 60 * 60)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 }

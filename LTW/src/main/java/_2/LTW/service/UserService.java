@@ -2,8 +2,10 @@ package _2.LTW.service;
 
 import _2.LTW.dto.response.UserResponse;
 import _2.LTW.entity.User;
+import _2.LTW.entity.UserRole;
 import _2.LTW.mapper.UserMapper;
 import _2.LTW.repository.UserRepository;
+import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.dto.request.UserRequest;
 import _2.LTW.validate.EmailValidate;
 import _2.LTW.util.SecurityUtil;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final CloudinaryService cloudinaryService;
     private final SecurityUtil securityUtil;
     private final UserMapper userMapper;
@@ -28,6 +31,17 @@ public class UserService {
     public List<UserResponse> getAllUser() {
         List<User> users = userRepository.findAll();
         return userMapper.toUserResponses(users);
+    }
+
+    public UserResponse getMe() {
+        User currentUser = securityUtil.getCurrentUser();
+        UserResponse response = userMapper.toUserResponse(currentUser);
+        response.setRoles(
+                userRoleRepository.findByUser_Id(currentUser.getId()).stream()
+                        .map(UserRole::getRole)
+                        .toList()
+        );
+        return response;
     }
 
     public UserResponse updateUser(Long id, UserRequest userRequest) {

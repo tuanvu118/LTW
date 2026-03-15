@@ -28,6 +28,11 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllUser());
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getMe() {
+        return ResponseEntity.ok(userService.getMe());
+    }
+
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public UserResponse updateUser(@PathVariable Long id, @ModelAttribute UserRequest userRequest) {
         return userService.updateUser(id, userRequest);

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -24,8 +25,9 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration:1800000}") // 30 phút mặc định (milliseconds)
+    @Value("${jwt.expiration}")
     private Long expiration;
+    private Long refreshTokenExpirationMs;
 
     /**
      * Tạo secret key từ secret string
@@ -58,8 +60,12 @@ public class JwtUtil {
      * Tạo JWT token
      */
     private String createToken(Map<String, Object> claims, String subject) {
+        return createToken(claims, subject, expiration);
+    }
+
+    private String createToken(Map<String, Object> claims, String subject, Long expiresInMs) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
+        Date expiryDate = new Date(now.getTime() + expiresInMs);
 
         return Jwts.builder()
                 .claims(claims)
@@ -148,4 +154,24 @@ public class JwtUtil {
         }
     }
 
+    public String generateRefreshToken(String username, Long userId) {
+        return generateRefreshToken(username, userId, UUID.randomUUID().toString());
+    }
+
+    public String generateRefreshToken(String username, Long userId, String jti) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", userId);
+        claims.put("type", "refresh");
+        claims.put("jti", jti);
+        refreshTokenExpirationMs = expiration * 2;
+        return createToken(claims, username, refreshTokenExpirationMs);
+    }
+
+    public String getTypeFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("type", String.class));
+    }
+
+    public String getJtiFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("jti", String.class));
+    }
 }

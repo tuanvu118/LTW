@@ -30,7 +30,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String[] POST_PUBLIC_ENDPOINT = {
-            "/auth/register", "/auth/login"
+            "/auth/register", "/auth/login", "/auth/refresh"
     };
 
     private static final String[] GET_PUBLIC_ENDPOINT = {

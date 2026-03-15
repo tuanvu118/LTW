@@ -12,7 +12,7 @@ import lombok.*;
 
 public class LoginResponse {
     private String access_token;
-    private int expires_in;
+    private int expires_in_seconds;
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String refreshTokenRaw;
     private UserResponse userResponse;

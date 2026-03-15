@@ -110,7 +110,7 @@ public class AuthService {
 
         return LoginResponse.builder()
             .access_token(token)
-            .expires_in(Math.toIntExact(accessTokenExpirationMs / 1000))
+            .expires_in_seconds(Math.toIntExact(accessTokenExpirationMs / 1000))
             .refreshTokenRaw(refreshToken)
             .userResponse(userResponse)
             .build();
@@ -182,7 +182,7 @@ public class AuthService {
 
         return LoginResponse.builder()
                 .access_token(accessToken)
-                .expires_in(Math.toIntExact(accessTokenExpirationMs / 1000))
+                .expires_in_seconds(Math.toIntExact(accessTokenExpirationMs / 1000))
                 .refreshTokenRaw(newRefreshToken)
                 .userResponse(userResponse)
                 .build();

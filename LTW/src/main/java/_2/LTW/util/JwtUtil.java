@@ -25,9 +25,11 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration}")
+    @Value("${jwt.expiration:1800000}")
     private Long expiration;
-    private Long refreshTokenExpirationMs;
+
+    @Value("${jwt.refresh-expiration:1296000000}")
+    private Long refreshExpirationMs;
 
     /**
      * Tạo secret key từ secret string
@@ -163,8 +165,7 @@ public class JwtUtil {
         claims.put("userId", userId);
         claims.put("type", "refresh");
         claims.put("jti", jti);
-        refreshTokenExpirationMs = expiration * 2;
-        return createToken(claims, username, refreshTokenExpirationMs);
+        return createToken(claims, username, refreshExpirationMs);
     }
 
     public String getTypeFromToken(String token) {

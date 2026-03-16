@@ -1,7 +1,6 @@
-package _2.LTW.entity;
+package _2.LTW.entity.DoctorWork;
 
-import _2.LTW.enums.ShiftType;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.entity.User;
 import jakarta.persistence.*;
 
 import lombok.*;

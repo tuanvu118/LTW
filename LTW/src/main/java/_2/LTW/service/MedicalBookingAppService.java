@@ -5,13 +5,14 @@ import _2.LTW.dto.request.MedicalBookingRequest.CreateMedicalBookingServiceItemR
 import _2.LTW.dto.response.MedicalBookingResponse.DoctorAvailabilityResponse;
 import _2.LTW.dto.response.MedicalBookingResponse.MedicalBookingResponse;
 import _2.LTW.entity.*;
+import _2.LTW.entity.DoctorDailySlot.BookingType;
 import _2.LTW.entity.MedicalBooking.MedicalBooking;
 import _2.LTW.entity.MedicalBooking.MedicalBookingService;
 import _2.LTW.entity.MedicalBooking.Status;
 import _2.LTW.entity.Pets.Pets;
 import _2.LTW.enums.RoleEnum;
-import _2.LTW.enums.ShiftType;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.entity.DoctorWork.ShiftType;
+import _2.LTW.entity.DoctorWork.SlotStatus;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.mapper.MedicalBookingMapper;
 import _2.LTW.repository.*;
@@ -42,6 +43,7 @@ public class MedicalBookingAppService {
     PetRepository petRepository;
     UserRepository userRepository;
     UserRoleRepository userRoleRepository;
+    DoctorDailySlotService doctorDailySlotService;
     SecurityUtil securityUtil;
     BookingDateTimeValidator bookingDateTimeValidator;
     MedicalBookingMapper medicalBookingMapper;
@@ -60,7 +62,7 @@ public class MedicalBookingAppService {
 
         validateWithinSingleShift(request.getStartTime(), estimatedEndTime);
         ensureDoctorHasApprovedShift(doctor.getId(), request.getBookingDate(), request.getStartTime());
-        ensureNoBookingOverlap(doctor.getId(), request.getBookingDate(), request.getStartTime(), estimatedEndTime);
+//        ensureNoBookingOverlap(doctor.getId(), request.getBookingDate(), request.getStartTime(), estimatedEndTime);
 
         MedicalBooking booking = medicalBookingMapper.toMedicalBooking(request);
         booking.setPets(pet);
@@ -71,6 +73,16 @@ public class MedicalBookingAppService {
         booking.setMedicalBookingsService(details);
 
         MedicalBooking saved = medicalBookingRepository.save(booking);
+
+        doctorDailySlotService.reservedSlots(
+                request.getDoctorId(),
+                request.getBookingDate(),
+                request.getStartTime(),
+                totalDuration,
+                BookingType.MEDICAL,
+                saved.getId()
+        );
+
         return medicalBookingMapper.toMedicalBookingResponse(saved);
     }
 
@@ -111,7 +123,18 @@ public class MedicalBookingAppService {
             throw ErrorCode.BAD_REQUEST.toException("Chỉ được hủy booking đang ở trạng thái BOOKED");
         }
 
+        int duration = booking.getMedicalBookingsService().stream()
+                .mapToInt(MedicalBookingService::getTimeDuration)
+                .sum();
+
         booking.setStatus(Status.CANCELLED);
+        doctorDailySlotService.releaseSlots(
+                booking.getDoctor().getId(),
+                booking.getBookingDate(),
+                booking.getStartTime(),
+                duration
+        );
+
         return medicalBookingMapper.toMedicalBookingResponse(medicalBookingRepository.save(booking));
     }
 

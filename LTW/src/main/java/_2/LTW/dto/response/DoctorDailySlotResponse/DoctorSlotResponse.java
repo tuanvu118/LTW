@@ -1,19 +1,19 @@
-package _2.LTW.dto.response.doctor_work;
+package _2.LTW.dto.response.DoctorDailySlotResponse;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-
-import _2.LTW.enums.ShiftType;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class SlotResponse {
+public class DoctorSlotResponse {
 
-    Integer dayOfWeek;
+    Long doctorId;
 
-    ShiftType shiftType;
+    String doctorName;
+
+    String imageUrl;
 
 }

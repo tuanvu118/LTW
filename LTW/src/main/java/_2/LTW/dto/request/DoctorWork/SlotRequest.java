@@ -1,6 +1,6 @@
-package _2.LTW.dto.request.doctor_work;
+package _2.LTW.dto.request.DoctorWork;
 
-import _2.LTW.enums.ShiftType;
+import _2.LTW.entity.DoctorWork.ShiftType;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;

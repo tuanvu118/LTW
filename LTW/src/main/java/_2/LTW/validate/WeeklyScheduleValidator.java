@@ -1,7 +1,7 @@
 package _2.LTW.validate;
 
-import _2.LTW.dto.request.doctor_work.SlotRequest;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.dto.request.DoctorWork.SlotRequest;
+import _2.LTW.entity.DoctorWork.SlotStatus;
 import _2.LTW.exception.ErrorCode;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;

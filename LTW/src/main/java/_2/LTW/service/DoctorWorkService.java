@@ -1,12 +1,12 @@
 package _2.LTW.service;
 
-import _2.LTW.dto.request.doctor_work.WeeklyScheduleRequest;
+import _2.LTW.dto.request.DoctorWork.WeeklyScheduleRequest;
 import _2.LTW.dto.response.UserResponse;
-import _2.LTW.dto.response.doctor_work.WeeklyScheduleResponse;
-import _2.LTW.entity.DoctorWork;
+import _2.LTW.dto.response.DoctorWork.WeeklyScheduleResponse;
+import _2.LTW.entity.DoctorWork.DoctorWork;
 import _2.LTW.entity.User;
-import _2.LTW.enums.ShiftType;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.entity.DoctorWork.ShiftType;
+import _2.LTW.entity.DoctorWork.SlotStatus;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.mapper.DoctorWorkMapper;
 import _2.LTW.mapper.UserMapper;

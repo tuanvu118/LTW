@@ -1,4 +1,4 @@
-package _2.LTW.dto.request.doctor_work;
+package _2.LTW.dto.request.DoctorWork;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;

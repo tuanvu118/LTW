@@ -20,7 +20,7 @@ import java.util.List;
 public class MedicalBooking {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Integer id;
+    Long id;
 
     @Column(name = "booking_date", nullable = false)
     LocalDate bookingDate;

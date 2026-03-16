@@ -1,6 +1,6 @@
-package _2.LTW.dto.response.doctor_work;
+package _2.LTW.dto.response.DoctorWork;
 
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.entity.DoctorWork.SlotStatus;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 

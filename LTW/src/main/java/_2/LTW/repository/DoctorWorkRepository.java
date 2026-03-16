@@ -1,9 +1,9 @@
 package _2.LTW.repository;
 
-import _2.LTW.entity.DoctorWork;
+import _2.LTW.entity.DoctorWork.DoctorWork;
 import _2.LTW.entity.User;
-import _2.LTW.enums.ShiftType;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.entity.DoctorWork.ShiftType;
+import _2.LTW.entity.DoctorWork.SlotStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -108,4 +108,7 @@ public interface DoctorWorkRepository extends JpaRepository<DoctorWork, Long> {
     """)
     List<DoctorWork> lockWeekSlots(@Param("weekStart") LocalDate weekStart);
 
+    List<DoctorWork> findDoctorWorkByDayOfWeek(Integer dayOfWeek);
+
+    List<DoctorWork> findDoctorWorkByDayOfWeekAndSlotStatus(Integer dayOfWeek, SlotStatus slotStatus);
 }

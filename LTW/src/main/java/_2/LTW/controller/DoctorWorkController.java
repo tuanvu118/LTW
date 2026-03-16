@@ -1,14 +1,16 @@
 package _2.LTW.controller;
 
 import _2.LTW.dto.request.ApiResponse;
-import _2.LTW.dto.request.doctor_work.WeeklyScheduleRequest;
+import _2.LTW.dto.request.DoctorWork.WeeklyScheduleRequest;
+import _2.LTW.dto.response.DoctorDailySlotResponse.AvailableSlotReponse;
 import _2.LTW.dto.response.UserResponse;
-import _2.LTW.dto.response.doctor_work.SlotResponse;
-import _2.LTW.dto.response.doctor_work.WeeklyScheduleResponse;
-import _2.LTW.enums.SlotStatus;
+import _2.LTW.dto.response.DoctorWork.SlotResponse;
+import _2.LTW.dto.response.DoctorWork.WeeklyScheduleResponse;
+import _2.LTW.entity.DoctorDailySlot.BookingType;
+import _2.LTW.entity.DoctorWork.SlotStatus;
+import _2.LTW.service.DoctorDailySlotService;
 import _2.LTW.service.DoctorWorkService;
 import _2.LTW.util.CustomPrincipal;
-import _2.LTW.util.SecurityUtil;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import java.util.List;
 public class DoctorWorkController {
 
     DoctorWorkService doctorWorkService;
+    DoctorDailySlotService doctorDailySlotService;
 
     @PostMapping("/me")
     ApiResponse<WeeklyScheduleResponse> createWeeklySchedule(@Valid @RequestBody WeeklyScheduleRequest request) {
@@ -37,13 +40,14 @@ public class DoctorWorkController {
 
     }
 
-    @GetMapping("/doctors/available")
-    ApiResponse<List<UserResponse>> getAvailableDoctor(
+    @GetMapping("/available")
+    ApiResponse<AvailableSlotReponse> getAvailableDoctor(
             @RequestParam LocalDate bookingDate,
-            @RequestParam LocalTime startTime
+            @RequestParam BookingType bookingType,
+            @RequestParam List<Long> serviceIds
     ){
 
-        return ApiResponse.ok(doctorWorkService.getAvailableDoctors(bookingDate, startTime));
+        return ApiResponse.ok(doctorDailySlotService.getAvailableSlots(bookingDate, bookingType, serviceIds));
 
     }
 

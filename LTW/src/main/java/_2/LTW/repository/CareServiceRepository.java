@@ -40,4 +40,11 @@ public interface CareServiceRepository extends JpaRepository<CareService, Long> 
     boolean existsByName(String name);
 
     boolean existsByNameAndIdNot(String name, Long id);
+
+    @Query("""
+        SELECT COALESCE(SUM(cs.durationMinutes), 0)
+        FROM CareService cs
+        WHERE cs.id IN :serviceIds
+    """)
+    int sumDuration(@Param("serviceIds") List<Long> serviceIds);
 }

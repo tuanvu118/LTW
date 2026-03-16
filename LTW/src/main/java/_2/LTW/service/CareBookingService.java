@@ -8,9 +8,10 @@ import _2.LTW.entity.*;
 import _2.LTW.entity.CareBooking.CareBooking;
 import _2.LTW.entity.CareBooking.CareBookingServiceItem;
 import _2.LTW.entity.CareBooking.CareBookingStatus;
+import _2.LTW.entity.DoctorDailySlot.BookingType;
 import _2.LTW.entity.Pets.Pets;
 import _2.LTW.enums.RoleEnum;
-import _2.LTW.enums.ShiftType;
+import _2.LTW.entity.DoctorWork.ShiftType;
 import _2.LTW.exception.ErrorCode;
 import _2.LTW.mapper.CareBookingMapper;
 import _2.LTW.repository.*;
@@ -39,6 +40,7 @@ public class CareBookingService {
     PetRepository petRepository;
     UserRepository userRepository;
     UserRoleRepository userRoleRepository;
+    DoctorDailySlotService doctorDailySlotService;
     BookingDateTimeValidator bookingDateTimeValidator;
     CareBookingMapper careBookingMapper;
     SecurityUtil securityUtil;
@@ -55,7 +57,7 @@ public class CareBookingService {
         LocalTime estimatedEndTime = request.getStartTime().plusMinutes(totalDuration);
 
         validateWithinSingleShift(request.getStartTime(), estimatedEndTime);
-        ensureNoBookingOverlap(doctor.getId(), request.getBookingDate(), request.getStartTime(), estimatedEndTime, null);
+//        ensureNoBookingOverlap(doctor.getId(), request.getBookingDate(), request.getStartTime(), estimatedEndTime, null);
 
         CareBooking booking = careBookingMapper.toCareBooking(request);
         booking.setPet(pet);
@@ -67,6 +69,16 @@ public class CareBookingService {
         booking.setCareBookingServices(details);
 
         CareBooking saved = careBookingRepository.save(booking);
+
+        doctorDailySlotService.reservedSlots(
+                doctor.getId(),
+                request.getBookingDate(),
+                request.getStartTime(),
+                totalDuration,
+                BookingType.CARE,
+                saved.getId()
+                );
+
         return careBookingMapper.toResponse(saved);
     }
 
@@ -100,7 +112,18 @@ public class CareBookingService {
             throw ErrorCode.CARE_BOOKING_CANNOT_UPDATE.toException("Chỉ được hủy booking chưa xử lý");
         }
 
+        int duration = booking.getCareBookingServices().stream()
+                .mapToInt(CareBookingServiceItem::getDurationMinutes)
+                .sum();
+
         booking.setStatus(CareBookingStatus.CANCELLED);
+        doctorDailySlotService.releaseSlots(
+                booking.getDoctor().getId(),
+                booking.getBookingDate(),
+                booking.getStartTime(),
+                duration
+        );
+
         return careBookingMapper.toResponse(careBookingRepository.save(booking));
     }
 
@@ -182,7 +205,28 @@ public class CareBookingService {
         LocalTime estimatedEndTime = startTime.plusMinutes(totalDuration);
 
         validateWithinSingleShift(startTime, estimatedEndTime);
-        ensureNoBookingOverlap(doctor.getId(), bookingDate, startTime, estimatedEndTime, booking.getId());
+//        ensureNoBookingOverlap(doctor.getId(), bookingDate, startTime, estimatedEndTime, booking.getId());
+
+        int oldDuration = booking.getCareBookingServices()
+                .stream()
+                .mapToInt(CareBookingServiceItem::getDurationMinutes)
+                .sum();
+
+        doctorDailySlotService.releaseSlots(
+                booking.getDoctor().getId(),
+                booking.getBookingDate(),
+                booking.getStartTime(),
+                oldDuration
+        );
+
+        doctorDailySlotService.reservedSlots(
+                doctor.getId(),
+                bookingDate,
+                startTime,
+                totalDuration,
+                BookingType.CARE,
+                bookingId
+        );
 
         booking.setBookingDate(bookingDate);
         booking.setStartTime(startTime);

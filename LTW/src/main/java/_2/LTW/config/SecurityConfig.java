@@ -44,6 +44,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            .cors(cors -> {}) // Áp dụng CORS từ CorsConfig
             .csrf(csrf -> csrf.disable()) // Tắt CSRF cho REST API
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Stateless session

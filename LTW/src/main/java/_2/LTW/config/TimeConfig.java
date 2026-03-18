@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile;
 import java.time.Clock;
 
 @Configuration
-@Profile("default")
+@Profile({"default", "production"})
 public class TimeConfig {
 
     @Bean

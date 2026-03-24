@@ -9,7 +9,9 @@ import _2.LTW.repository.UserRoleRepository;
 import _2.LTW.enums.RoleEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -17,42 +19,34 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Class tự động chạy khi ứng dụng khởi động
- * Tạo tài khoản admin nếu chưa có
+ * Tự động chạy khi ứng dụng khởi động xong (sau khi DB sẵn sàng).
+ * Tạo tài khoản admin nếu chưa có.
+ * Dùng ApplicationReadyEvent thay vì CommandLineRunner để đảm bảo DB đã sẵn sàng.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DataInitializer implements CommandLineRunner {
+public class DataInitializer {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
-    
-    @Override
-    public void run(String... args) throws Exception {
-        // Khởi tạo 3 role trước: admin, doctor, user
+
+    @EventListener(ApplicationReadyEvent.class)
+    @Order(Integer.MIN_VALUE)
+    public void onApplicationReady() {
         initializeRoles();
-        // Sau đó mới tạo admin user
         initializeAdminUser();
     }
 
-    /**
-     * Khởi tạo 3 role cơ bản: admin, doctor, user
-     * Kiểm tra từng role, nếu chưa có thì tạo mới
-     */
     private void initializeRoles() {
         try {
             log.info("Đang kiểm tra và khởi tạo các role cơ bản...");
-            
-            // Danh sách các role cần tạo
             RoleEnum[] requiredRoles = {RoleEnum.ADMIN, RoleEnum.DOCTOR, RoleEnum.USER};
-            
+
             for (RoleEnum role : requiredRoles) {
-                // Kiểm tra role đã tồn tại chưa
                 if (roleRepository.findByRoleEnum(role).isEmpty()) {
-                    // Nếu chưa có, tạo mới
                     log.info("Không tìm thấy role '{}', đang tạo mới...", role.name());
                     Role newRole = new Role();
                     newRole.setRoleEnum(role);
@@ -63,42 +57,33 @@ public class DataInitializer implements CommandLineRunner {
                     log.debug("Role '{}' đã tồn tại trong hệ thống", role.name());
                 }
             }
-            
             log.info("Hoàn thành kiểm tra và khởi tạo các role cơ bản.");
         } catch (Exception e) {
             log.error("Lỗi khi khởi tạo các role: {}", e.getMessage(), e);
         }
     }
 
-    /**
-     * Khởi tạo tài khoản admin nếu chưa có
-     * Lưu ý: Phải gọi initializeRoles() trước để đảm bảo role admin đã tồn tại
-     */
     private void initializeAdminUser() {
         try {
-            // Tìm role admin (đã được khởi tạo ở initializeRoles())
             Role adminRole = roleRepository.findByRoleEnum(RoleEnum.ADMIN)
                     .orElseThrow(() -> new RuntimeException(
                             "Role 'admin' chưa được khởi tạo. Vui lòng kiểm tra lại initializeRoles()"));
 
-            // Kiểm tra xem đã có user nào có role admin chưa (qua user_role, vì User không có getUserRoles())
             List<UserRole> userRoles = userRoleRepository.findByRole_Id(adminRole.getId().longValue());
 
             if (userRoles.isEmpty()) {
-                // Tạo tài khoản admin
                 log.info("Không tìm thấy user admin, đang tạo tài khoản admin mặc định...");
-                
+
                 User adminUser = new User();
-                adminUser.setUsername(RoleEnum.ADMIN.name());
-                adminUser.setPassword(passwordEncoder.encode("admin")); // Hash password
+                adminUser.setFullname("Admin");
+                adminUser.setPassword(passwordEncoder.encode("admin"));
                 adminUser.setEmail("admin@example.com");
                 adminUser.setCreatedAt(LocalDateTime.now());
                 adminUser.setIsDeleted(null);
-                
                 userRepository.save(adminUser);
-                
+
                 log.info("✅ Đã tạo tài khoản admin thành công!");
-                log.info("Username: admin");
+                log.info("Email: admin@example.com");
                 log.info("Password: admin");
                 log.warn("⚠️ VUI LÒNG ĐỔI MẬT KHẨU ADMIN SAU KHI ĐĂNG NHẬP!");
             } else {
@@ -108,17 +93,16 @@ public class DataInitializer implements CommandLineRunner {
             log.error("Lỗi khi khởi tạo tài khoản admin: {}", e.getMessage(), e);
         }
 
-        // Tạo bảng user_role với admin có role admin
         try {
             Role adminRole = roleRepository.findByRoleEnum(RoleEnum.ADMIN)
                     .orElseThrow(() -> new RuntimeException("Role ADMIN chưa được khởi tạo."));
-            User adminUser = userRepository.findByUsername(RoleEnum.ADMIN.name())
-                    .orElse(null);
+            User adminUser = userRepository.findByEmail("admin@example.com").orElse(null);
             if (adminUser != null && userRoleRepository.findByUserAndRole(adminUser, adminRole).isEmpty()) {
                 UserRole userRole = new UserRole();
                 userRole.setUser(adminUser);
                 userRole.setRole(adminRole);
                 userRoleRepository.save(userRole);
+                log.info("✅ Đã liên kết admin với role ADMIN");
             }
         } catch (Exception e) {
             log.error("Lỗi khi tạo bảng user_role: {}", e.getMessage(), e);

@@ -14,7 +14,7 @@ import java.util.List;
 
 public class UserResponse {
     private Long id;
-    private String username;
+    private String fullname;
     private String email;
     private List<Role> roles;
     private String imageUrl;

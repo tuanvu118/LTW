@@ -204,7 +204,7 @@ public class MedicalBookingAppService {
                 .filter(doctor -> isDoctorFree(doctor.getId(), bookingDate, startTime, estimatedEndTime))
                 .map(doctor -> DoctorAvailabilityResponse.builder()
                         .doctorId(doctor.getId())
-                        .doctorName(doctor.getUsername())
+                        .doctorName(doctor.getFullname())
                         .bookingDate(bookingDate)
                         .startTime(startTime)
                         .estimatedEndTime(estimatedEndTime)

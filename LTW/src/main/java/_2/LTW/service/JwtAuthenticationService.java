@@ -76,14 +76,21 @@ public class JwtAuthenticationService {
     }
 
     /**
-     * Hàm 3: Lấy username từ JWT token
+     * Hàm 3: Lấy email (subject) từ JWT token
      * Nhiệm vụ: Extract claim "sub" (subject) từ token payload
      * 
      * @param token JWT token string
-     * @return Username string
+     * @return Email string
      */
-    public String getUsernameFromToken(String token) {
-        return jwtUtil.getUsernameFromToken(token);
+    public String getEmailFromToken(String token) {
+        return jwtUtil.getEmailFromToken(token);
+    }
+
+    /**
+     * Lấy fullname từ JWT token
+     */
+    public String getFullnameFromToken(String token) {
+        return jwtUtil.getFullnameFromToken(token);
     }
 
     /**
@@ -102,15 +109,15 @@ public class JwtAuthenticationService {
      * Nhiệm vụ: Extract claim "role" từ token payload, nếu không có thì query database
      * 
      * @param token JWT token string
-     * @param username Username để query database nếu cần
+     * @param email Email để query database nếu cần
      * @return Role name string (ví dụ: "admin", "doctor", "user")
      */
-    public String getRoleFromToken(String token, String username) {
+    public String getRoleFromToken(String token, String email) {
         String roleName = jwtUtil.getRoleFromToken(token);
         
         if (roleName == null || roleName.isEmpty()) {
-            log.debug("Role không có trong token, đang query từ database cho user: {}", username);
-            Optional<User> userOptional = userRepository.findByUsername(username);
+            log.debug("Role không có trong token, đang query từ database cho user: {}", email);
+            Optional<User> userOptional = userRepository.findByEmail(email);
             if (userOptional.isPresent()) {
                 User user = userOptional.get();
                 var roles = userRoleRepository.findByUser_Id(user.getId()).stream()
@@ -161,20 +168,23 @@ public class JwtAuthenticationService {
 
     /**
      * Hàm 7: Tạo Spring Security Authentication object
-     * Nhiệm vụ: Tạo UsernamePasswordAuthenticationToken với username và authorities để Spring Security sử dụng
+     * Nhiệm vụ: Tạo UsernamePasswordAuthenticationToken với email, fullname và authorities để Spring Security sử dụng
      * 
-     * @param username Username từ token
+     * @param userId User ID từ token
+     * @param email Email từ token (subject)
+     * @param fullname Fullname từ token
      * @param roleName Role name từ token hoặc database
      * @param request HttpServletRequest để set details
      * @return UsernamePasswordAuthenticationToken object
      */
     public UsernamePasswordAuthenticationToken createAuthentication(
             Long userId,
-            String username, 
+            String email, 
+            String fullname,
             String roleName, 
             HttpServletRequest request) {
 
-        CustomPrincipal principal = new CustomPrincipal(userId, username, roleName);
+        CustomPrincipal principal = new CustomPrincipal(userId, email, fullname != null ? fullname : "", roleName);
         List<SimpleGrantedAuthority> authorities = convertRoleToAuthorities(roleName);
 
         UsernamePasswordAuthenticationToken authentication =
@@ -200,15 +210,15 @@ public class JwtAuthenticationService {
     }
 
     /**
-     * Hàm 9: Set username và userId vào request attributes
+     * Hàm 9: Set email và userId vào request attributes
      * Nhiệm vụ: Lưu thông tin user vào request để controller có thể truy cập qua request.getAttribute()
      * 
      * @param request HttpServletRequest
-     * @param username Username từ token
+     * @param email Email từ token
      * @param userId User ID từ token
      */
-    public void setRequestAttributes(HttpServletRequest request, String username, Long userId) {
-        request.setAttribute("username", username);
+    public void setRequestAttributes(HttpServletRequest request, String email, Long userId) {
+        request.setAttribute("email", email);
         request.setAttribute("userId", userId);
     }
 
@@ -255,19 +265,20 @@ public class JwtAuthenticationService {
 
             Long userId = getUserIdFromToken(token);
 
-            String username = getUsernameFromToken(token);
-            log.debug("Username từ token: {}", username);
+            String email = getEmailFromToken(token);
+            String fullname = getFullnameFromToken(token);
+            log.debug("Email từ token: {}", email);
 
-            String roleName = getRoleFromToken(token, username);
+            String roleName = getRoleFromToken(token, email);
             log.debug("Role từ token/database: {}", roleName);
 
             UsernamePasswordAuthenticationToken authentication = 
-                createAuthentication(userId, username, roleName, request);
+                createAuthentication(userId, email, fullname, roleName, request);
             setSecurityContext(authentication);
 
             List<SimpleGrantedAuthority> grantedAuthorities = convertRoleToAuthorities(roleName);
             log.info("✅ Đã xác thực user: {} với role: {}, authorities: {} cho request: {}",
-                    username, roleName, grantedAuthorities, request.getRequestURI());
+                    email, roleName, grantedAuthorities, request.getRequestURI());
             
             return true;
 
@@ -306,11 +317,11 @@ public class JwtAuthenticationService {
             }
 
             // Bước 3: Lấy thông tin user từ token để log (không set vào request attributes)
-            String username = getUsernameFromToken(token);
+            String email = getEmailFromToken(token);
             Long userId = getUserIdFromToken(token);
 
-            log.info("Người dùng đã xác thực - Username: {}, User ID: {} cho request: {}", 
-                    username, userId, request.getRequestURI());
+            log.info("Người dùng đã xác thực - Email: {}, User ID: {} cho request: {}", 
+                    email, userId, request.getRequestURI());
             
             return true;
 

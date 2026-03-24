@@ -8,7 +8,8 @@ import lombok.Getter;
 public class CustomPrincipal {
 
     private Long id;
-    private String username;
+    private String email;
+    private String fullname;
     private String role;
 
 }

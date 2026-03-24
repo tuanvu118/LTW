@@ -40,7 +40,7 @@ public class AuthController {
                 .collect(Collectors.toList());
         return UserResponse.builder()
             .id(user.getId())
-            .username(user.getUsername())
+            .fullname(user.getFullname())
             .email(user.getEmail())
             .roles(roles)
             .imageUrl(user.getImageUrl())
@@ -73,6 +73,7 @@ public class AuthController {
         ResponseCookie cookie = ResponseCookie.from("refresh_token", refreshTokenRaw)
                 .httpOnly(true)
                 .secure(true)
+                .sameSite("None")
                 .maxAge(7 * 24 * 60 * 60)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());

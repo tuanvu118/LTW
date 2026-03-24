@@ -42,16 +42,20 @@ public class SecurityUtil {
     }
 
     public User getCurrentUser() {
-        String username = getCurrentPrincipal().getUsername();
-        return userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+        String email = getCurrentPrincipal().getEmail();
+        return userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
     public Long getCurrentUserId(){
         return getCurrentPrincipal().getId();
     }
 
-    public String getCurrentUsername(){
-        return getCurrentPrincipal().getUsername();
+    public String getCurrentEmail(){
+        return getCurrentPrincipal().getEmail();
+    }
+
+    public String getCurrentFullname(){
+        return getCurrentPrincipal().getFullname();
     }
 
     public String getCurrentRole(){

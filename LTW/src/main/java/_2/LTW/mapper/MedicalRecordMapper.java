@@ -61,9 +61,9 @@ public interface MedicalRecordMapper {
     @Mapping(target = "petId", source = "medicalBooking.pets.id")
     @Mapping(target = "petName", source = "medicalBooking.pets.name")
     @Mapping(target = "ownerId", source = "medicalBooking.pets.user.id")
-    @Mapping(target = "ownerName", source = "medicalBooking.pets.user.username")
+    @Mapping(target = "ownerName", source = "medicalBooking.pets.user.fullname")
     @Mapping(target = "doctorId", source = "medicalBooking.doctor.id")
-    @Mapping(target = "doctorName", source = "medicalBooking.doctor.username")
+    @Mapping(target = "doctorName", source = "medicalBooking.doctor.fullname")
     @Mapping(target = "bookingDate", source = "medicalBooking.bookingDate")
     @Mapping(target = "prescriptions", ignore = true)
     @Mapping(target = "treatments", ignore = true)
@@ -73,7 +73,7 @@ public interface MedicalRecordMapper {
     @Mapping(target = "petId", source = "medicalBooking.pets.id")
     @Mapping(target = "petName", source = "medicalBooking.pets.name")
     @Mapping(target = "doctorId", source = "medicalBooking.doctor.id")
-    @Mapping(target = "doctorName", source = "medicalBooking.doctor.username")
+    @Mapping(target = "doctorName", source = "medicalBooking.doctor.fullname")
     @Mapping(target = "bookingDate", source = "medicalBooking.bookingDate")
     MedicalRecordSummaryResponse toMedicalRecordSummaryResponse(MedicalRecords medicalRecord);
 

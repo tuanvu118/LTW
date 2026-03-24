@@ -49,7 +49,7 @@ public class SecurityConfig {
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Stateless session
             .authorizeHttpRequests(auth -> auth
-
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // CORS preflight
                 .requestMatchers(HttpMethod.POST, POST_PUBLIC_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, GET_PUBLIC_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/roles").hasRole("ADMIN")

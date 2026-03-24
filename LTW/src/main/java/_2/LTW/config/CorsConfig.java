@@ -13,11 +13,7 @@ import java.util.List;
 @Configuration
 public class CorsConfig {
 
-    /**
-     * Ví dụ: https://your-fe.railway.app,http://localhost:3000
-     * Nhiều URL cách nhau bằng dấu phẩy
-     */
-    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    @Value("${app.cors.allowed-origins:https://ltw.culus.io.vn/,http://127.0.0.1:5173,http://127.0.0.1:5174}")
     private String allowedOrigins;
 
     @Bean

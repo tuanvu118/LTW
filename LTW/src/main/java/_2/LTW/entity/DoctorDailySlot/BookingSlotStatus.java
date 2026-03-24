@@ -1,8 +1,0 @@
-package _2.LTW.entity.DoctorDailySlot;
-
-public enum BookingSlotStatus {
-
-    AVAILABLE,
-    RESERVED,
-
-}

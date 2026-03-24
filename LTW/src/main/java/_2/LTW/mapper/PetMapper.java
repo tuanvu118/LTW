@@ -26,6 +26,6 @@ public interface PetMapper {
     void updateEntity(@MappingTarget Pets pets, PetUpdateRequest request);
 
     @Mapping(target = "ownerId", source = "user.id")
-    @Mapping(target = "ownerName", source = "user.username")
+    @Mapping(target = "ownerName", source = "user.fullname")
     PetResponse toResponse(Pets pets);
 }

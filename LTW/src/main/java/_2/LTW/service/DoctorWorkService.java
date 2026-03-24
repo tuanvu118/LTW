@@ -301,7 +301,7 @@ public class DoctorWorkService {
 
         return WeeklyScheduleResponse.builder()
                 .doctorId(doctor.getId())
-                .doctorName(doctor.getUsername())
+                .doctorName(doctor.getFullname())
                 .applyFromWeek(weekStart)
                 .status(status)
                 .slots(doctorWorkMapper.toSlotResponses(slots))

@@ -32,7 +32,7 @@ public interface MedicalBookingMapper {
     @Mapping(target = "petId", source = "pets.id")
     @Mapping(target = "petName", source = "pets.name")
     @Mapping(target = "doctorId", source = "doctor.id")
-    @Mapping(target = "doctorName", source = "doctor.username")
+    @Mapping(target = "doctorName", source = "doctor.fullname")
     @Mapping(target = "estimatedEndTime", expression = "java(toEstimatedEndTime(booking))")
     @Mapping(target = "totalDuration", expression = "java(toTotalDuration(booking))")
     @Mapping(target = "services", source = "medicalBookingsService")

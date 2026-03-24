@@ -40,22 +40,23 @@ public class JwtUtil {
     }
 
     /**
-     * Tạo JWT token từ username và user ID
+     * Tạo JWT token từ email và user ID
      */
-    public String generateToken(String username, Long userId) {
+    public String generateToken(String email, Long userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
-        return createToken(claims, username);
+        return createToken(claims, email);
     }
 
     /**
-     * Tạo JWT token từ username, user ID và role name
+     * Tạo JWT token từ email, user ID, role name và fullname
      */
-    public String generateToken(String username, Long userId, String roleName) {
+    public String generateToken(String email, Long userId, String roleName, String fullname) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
-        claims.put("role", roleName); // Thêm role vào token
-        return createToken(claims, username);
+        claims.put("role", roleName);
+        claims.put("fullname", fullname != null ? fullname : "");
+        return createToken(claims, email);
     }
 
     /**
@@ -98,10 +99,18 @@ public class JwtUtil {
     }
 
     /**
-     * Lấy username từ token
+     * Lấy email (subject) từ token
      */
-    public String getUsernameFromToken(String token) {
+    public String getEmailFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
+    }
+
+    /**
+     * Lấy fullname từ token
+     */
+    public String getFullnameFromToken(String token) {
+        Object fullname = getClaimFromToken(token, claims -> claims.get("fullname"));
+        return fullname != null ? fullname.toString() : null;
     }
 
     /**
@@ -138,11 +147,11 @@ public class JwtUtil {
     }
 
     /**
-     * Validate token với username
+     * Validate token với email
      */
-    public Boolean validateToken(String token, String username) {
-        final String tokenUsername = getUsernameFromToken(token);
-        return (tokenUsername.equals(username) && !isTokenExpired(token));
+    public Boolean validateToken(String token, String email) {
+        final String tokenEmail = getEmailFromToken(token);
+        return (tokenEmail != null && tokenEmail.equals(email) && !isTokenExpired(token));
     }
 
     /**
@@ -156,16 +165,16 @@ public class JwtUtil {
         }
     }
 
-    public String generateRefreshToken(String username, Long userId) {
-        return generateRefreshToken(username, userId, UUID.randomUUID().toString());
+    public String generateRefreshToken(String email, Long userId) {
+        return generateRefreshToken(email, userId, UUID.randomUUID().toString());
     }
 
-    public String generateRefreshToken(String username, Long userId, String jti) {
+    public String generateRefreshToken(String email, Long userId, String jti) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("type", "refresh");
         claims.put("jti", jti);
-        return createToken(claims, username, refreshExpirationMs);
+        return createToken(claims, email, refreshExpirationMs);
     }
 
     public String getTypeFromToken(String token) {

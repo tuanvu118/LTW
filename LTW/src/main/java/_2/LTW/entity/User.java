@@ -24,13 +24,13 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "username", nullable = false, unique = true)
-    private String username;
+    @Column(name = "fullname", nullable = false)
+    private String fullname;
 
     @Column(name = "password", nullable = false)
     private String password; // Lưu password đã được hash
 
-    @Column(name = "email", nullable = true, unique = true)
+    @Column(name = "email", nullable = false, unique = true)
     private String email;
 
     @Column(name = "image_url", nullable = true)

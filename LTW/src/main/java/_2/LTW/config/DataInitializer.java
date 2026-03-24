@@ -75,7 +75,7 @@ public class DataInitializer {
                 log.info("Không tìm thấy user admin, đang tạo tài khoản admin mặc định...");
 
                 User adminUser = new User();
-                adminUser.setUsername(RoleEnum.ADMIN.name());
+                adminUser.setFullname("Admin");
                 adminUser.setPassword(passwordEncoder.encode("admin"));
                 adminUser.setEmail("admin@example.com");
                 adminUser.setCreatedAt(LocalDateTime.now());
@@ -83,7 +83,7 @@ public class DataInitializer {
                 userRepository.save(adminUser);
 
                 log.info("✅ Đã tạo tài khoản admin thành công!");
-                log.info("Username: {}", RoleEnum.ADMIN.name());
+                log.info("Email: admin@example.com");
                 log.info("Password: admin");
                 log.warn("⚠️ VUI LÒNG ĐỔI MẬT KHẨU ADMIN SAU KHI ĐĂNG NHẬP!");
             } else {
@@ -96,7 +96,7 @@ public class DataInitializer {
         try {
             Role adminRole = roleRepository.findByRoleEnum(RoleEnum.ADMIN)
                     .orElseThrow(() -> new RuntimeException("Role ADMIN chưa được khởi tạo."));
-            User adminUser = userRepository.findByUsername(RoleEnum.ADMIN.name()).orElse(null);
+            User adminUser = userRepository.findByEmail("admin@example.com").orElse(null);
             if (adminUser != null && userRoleRepository.findByUserAndRole(adminUser, adminRole).isEmpty()) {
                 UserRole userRole = new UserRole();
                 userRole.setUser(adminUser);

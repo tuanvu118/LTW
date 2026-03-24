@@ -40,7 +40,7 @@ public class AuthController {
                 .collect(Collectors.toList());
         return UserResponse.builder()
             .id(user.getId())
-            .username(user.getUsername())
+            .fullname(user.getFullname())
             .email(user.getEmail())
             .roles(roles)
             .imageUrl(user.getImageUrl())

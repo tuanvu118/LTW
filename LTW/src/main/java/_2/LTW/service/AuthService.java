@@ -56,10 +56,6 @@ public class AuthService {
     @Value("${jwt.expiration:1800000}")
     private Long accessTokenExpirationMs;
     public User register(RegisterRequest userRequest) {
-        if (userRepository.findByUsername(userRequest.getUsername()).isPresent()) {
-            throw ErrorCode.USERNAME_ALREADY_EXISTS.toException();
-        }
-
         if (!EmailValidate.isValid(userRequest.getEmail())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Email không hợp lệ");
         }
@@ -69,7 +65,7 @@ public class AuthService {
         }
         
         User user = new User();
-        user.setUsername(userRequest.getUsername());
+        user.setFullname(userRequest.getFullname());
         String hashedPassword = passwordEncoder.encode(userRequest.getPassword());
         user.setPassword(hashedPassword);
         user.setEmail(userRequest.getEmail());
@@ -86,7 +82,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
 
     public LoginResponse login(LoginRequest loginRequest) {
-        User user = userRepository.findByUsername(loginRequest.getUsername())
+        User user = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> ErrorCode.INVALID_CREDENTIALS.toException());
         
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
@@ -100,9 +96,9 @@ public class AuthService {
                 .map(Role::getRoleEnum)
                 .map(RoleEnum::name)
                 .collect(Collectors.joining(", "));
-        String token = jwtUtil.generateToken(user.getUsername(), user.getId(), roleName);
+        String token = jwtUtil.generateToken(user.getEmail(), user.getId(), roleName, user.getFullname());
         String refreshJti = UUID.randomUUID().toString();
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getId(), refreshJti);
+        String refreshToken = jwtUtil.generateRefreshToken(user.getEmail(), user.getId(), refreshJti);
         saveRefreshToken(user, refreshJti, refreshToken);
 
         UserResponse userResponse = userMapper.toUserResponse(user);
@@ -172,9 +168,9 @@ public class AuthService {
                 .map(RoleEnum::name)
                 .collect(Collectors.joining(", "));
 
-        String accessToken = jwtUtil.generateToken(user.getUsername(), user.getId(), roleName);
+        String accessToken = jwtUtil.generateToken(user.getEmail(), user.getId(), roleName, user.getFullname());
         String newRefreshJti = UUID.randomUUID().toString();
-        String newRefreshToken = jwtUtil.generateRefreshToken(user.getUsername(), user.getId(), newRefreshJti);
+        String newRefreshToken = jwtUtil.generateRefreshToken(user.getEmail(), user.getId(), newRefreshJti);
         saveRefreshToken(user, newRefreshJti, newRefreshToken);
 
         UserResponse userResponse = userMapper.toUserResponse(user);

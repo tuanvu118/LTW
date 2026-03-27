@@ -92,7 +92,9 @@ public class SecurityConfig {
         @Bean
         public CorsFilter corsFilter() {
             CorsConfiguration config = new CorsConfiguration();
-            config.addAllowedOrigin("http://localhost:5173");  // FE React
+            config.addAllowedOrigin("http://localhost:5173");
+            config.addAllowedOrigin("https://ltw.culus.io.vn");
+            config.addAllowedOrigin("https://btl-ltw-fe.vercel.app");
             config.addAllowedHeader("*");
             config.addAllowedMethod("*");
             config.setAllowCredentials(true);

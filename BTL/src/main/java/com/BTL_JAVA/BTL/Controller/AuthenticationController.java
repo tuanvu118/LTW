@@ -2,12 +2,15 @@ package com.BTL_JAVA.BTL.Controller;
 
 import com.BTL_JAVA.BTL.DTO.Request.*;
 import com.BTL_JAVA.BTL.DTO.Request.Auth.AuthenticationRequest;
+import com.BTL_JAVA.BTL.DTO.Request.Auth.ForgotPasswordRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Auth.IntrospectRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Auth.LogoutRequest;
+import com.BTL_JAVA.BTL.DTO.Request.Auth.ResetPasswordRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Auth.RefreshRequest;
 import com.BTL_JAVA.BTL.DTO.Response.Auth.AuthenticationResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Auth.IntrospectResponse;
 import com.BTL_JAVA.BTL.Service.AuthenticationService;
+import jakarta.validation.Valid;
 import com.nimbusds.jose.JOSEException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +65,24 @@ public class AuthenticationController {
         var result=authenticationService.refreshToken(request);
         return ApiResponse.<AuthenticationResponse>builder()
                 .result(result)
+                .build();
+    }
+
+    @PostMapping("/forgot-password")
+    ApiResponse<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authenticationService.requestPasswordReset(request);
+        return ApiResponse.<Void>builder()
+                .code(1000)
+                .message("Neu email ton tai, lien ket dat lai mat khau da duoc gui")
+                .build();
+    }
+
+    @PostMapping("/reset-password")
+    ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authenticationService.resetPassword(request);
+        return ApiResponse.<Void>builder()
+                .code(1000)
+                .message("Dat lai mat khau thanh cong")
                 .build();
     }
 

@@ -67,8 +67,8 @@ public enum ErrorCode {
     CANNOT_REMOVE_DEFAULT_ADDRESS(6007, "Khong cap nhat duoc do khong co DefaultAddress.", HttpStatus.BAD_REQUEST),
 
     // ===== PAYMENT (7xxx) =====
-    PAYMENT_NOT_FOUND(7001, "Khong thay thong tin paymen", HttpStatus.NOT_FOUND),
-
+    PAYMENT_NOT_FOUND(7001, "Khong thay thong tin payment", HttpStatus.NOT_FOUND),
+    INVALID_PAYMENT_METHOD(7002, "Phương thức thanh toán không hợp lệ", HttpStatus.BAD_REQUEST),
     // ===== Misc (9xxx) =====
     UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR);
 

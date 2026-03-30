@@ -68,34 +68,9 @@ public class OrderService {
         }
     }
 
-    private Double calculateFinalPrice(Integer productId, Double originalPrice) {
-        LocalDateTime now = LocalDateTime.now();
-        
-        // Tìm tất cả các ProductSale đang active của product này (đã sort theo saleValue DESC)
-        List<ProductSale> productSales = productSaleRepository.findActiveProductSaleByProductId(productId, now);
-        
-        // Nếu có sale, lấy discount lớn nhất (phần tử đầu tiên do đã sort DESC)
-        if (!productSales.isEmpty()) {
-            BigDecimal maxDiscount = productSales.getFirst().getSaleValue();
-            
-            if (maxDiscount != null && maxDiscount.compareTo(BigDecimal.ZERO) > 0) {
-                // Áp dụng discount: giá cuối = giá gốc * (1 - discount)
-                // Ví dụ: discount = 0.2 (20%) => giá cuối = giá gốc * 0.8
-                BigDecimal discountMultiplier = BigDecimal.ONE.subtract(maxDiscount);
-                double finalPrice = originalPrice * discountMultiplier.doubleValue();
-                
-                log.info("Product {} có sale {}% - Giá gốc: {}, Giá sale: {}", 
-                        productId, maxDiscount.multiply(BigDecimal.valueOf(100)), originalPrice, finalPrice);
-                
-                return finalPrice;
-            }
-        }
-        
-        return originalPrice;
-    }
-
     // tạo Order - redis
     public OrderResponse createOrder(OrderRequest request) {
+
         // 1. Lấy thông tin user
         User user = getCurrentAuthenticatedUser();
 
@@ -122,7 +97,7 @@ public class OrderService {
         boolean isLocked = false;
         try{
             // 4. TRY-LOCK FAIL-FAST (Đợi tối đa 2s, khóa sống tối đa 30s nếu server sập)
-            isLocked = multiLock.tryLock(2, 30, TimeUnit.SECONDS);
+            isLocked = multiLock.tryLock(2, TimeUnit.SECONDS);
             if(!isLocked) {
                 log.warn("User {} bị chặn do tranh chấp mua hàng.", user.getId());
                 throw new AppException(ErrorCode.SYSTEM_BUSY, "Hệ thống đang xử lý giao dịch, vui lòng thử lại sau giây lát!");
@@ -169,6 +144,7 @@ public class OrderService {
     }
 
     private Order executeOrderCreationDBLogic(User user, Address address, OrderRequest request, List<Integer> variationIds) {
+
         // 1. Lấy tất cả Variations trong 1 câu Query
         List<ProductVariation> variations = productVariationRepository.findAllByIdsWithProduct(variationIds);
         Map<Integer, ProductVariation> variationMap = variations.stream()
@@ -289,7 +265,7 @@ public class OrderService {
 
         boolean isLocked = false;
         try{
-            isLocked = multiLock.tryLock(2, 30, TimeUnit.SECONDS);
+            isLocked = multiLock.tryLock(2, TimeUnit.SECONDS);
 
             // Xử lý Hủy đơn trong Transaction DB
             Order canceledOrder = transactionTemplate.execute(status -> {

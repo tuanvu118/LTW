@@ -38,6 +38,8 @@ public enum ErrorCode {
     PRODUCT_EXISTED(1024, "Product already exists", HttpStatus.BAD_REQUEST),
     VARIATION_EXISTED(1025, "Variation already exists", HttpStatus.BAD_REQUEST),
     CANNOT_CANCEL_PAID_ORDER(1026, "Cannot cancel order that has been paid. Please request refund.", HttpStatus.BAD_REQUEST),
+    INVALID_RESET_TOKEN(1027, "Reset token is invalid.", HttpStatus.BAD_REQUEST),
+    EXPIRED_RESET_TOKEN(1028, "Reset token has expired.", HttpStatus.BAD_REQUEST),
 
     // ===== Sales (2xxx) =====
     SALE_NOT_EXISTED(2001, "Sale khong ton tai", HttpStatus.NOT_FOUND),

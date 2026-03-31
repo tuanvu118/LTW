@@ -30,6 +30,9 @@ public class Message {
     @JoinColumn(name = "sender_id", nullable = false)
     User sender;
 
+    // AI có thể trả về nội dung dài, nên cần lưu dạng TEXT/LONGTEXT thay vì mặc định VARCHAR(255).
+    @Lob
+    @Column(name = "content", columnDefinition = "LONGTEXT")
     String content;
 
     @CreationTimestamp

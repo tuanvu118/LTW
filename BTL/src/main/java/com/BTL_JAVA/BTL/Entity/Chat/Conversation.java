@@ -2,6 +2,7 @@ package com.BTL_JAVA.BTL.Entity.Chat;
 
 
 import com.BTL_JAVA.BTL.Entity.User;
+import com.BTL_JAVA.BTL.enums.ChatConversationType;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -32,6 +33,13 @@ public class Conversation {
     @JoinColumn(name = "admin_id", nullable = false)
     User admin;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "conversation_type")
+    ChatConversationType conversationType;
+
+    // lastMessage có thể dài (đặc biệt khi lấy câu trả lời AI), nên lưu dạng TEXT/LONGTEXT.
+    @Lob
+    @Column(name = "last_message", columnDefinition = "LONGTEXT")
     String lastMessage;
 
     @CreationTimestamp

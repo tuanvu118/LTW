@@ -29,7 +29,7 @@ public class SecurityConfig {
             "/auth/refresh",
             "/auth/outbound/authentication",
             "/auth/forgot-password",
-            "/auth/reset-password"
+            "/auth/reset-password",
     };
 
 
@@ -76,7 +76,8 @@ public class SecurityConfig {
                         .requestMatchers("/app/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/payment_infor").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/payment/*/status").hasRole(Role.ADMIN.name())
-                        .requestMatchers("/api/payment/**").authenticated()
+                         .requestMatchers("/api/payment/**").authenticated()
+                        .requestMatchers("/ai/**").authenticated()
                         .anyRequest().authenticated()
                 );
 //                .httpBasic(Customizer.withDefaults())  // bật Basic Auth

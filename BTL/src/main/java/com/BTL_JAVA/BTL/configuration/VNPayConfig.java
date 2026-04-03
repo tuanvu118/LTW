@@ -10,14 +10,14 @@ import java.util.*;
 public class VNPayConfig {
     public static String vnp_PayUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
     public static String vnp_ReturnUrl = "http://localhost:8080/api/payment/payment_infor";
-    public static String vnp_TmnCode = "7YDBF7NX";
-    public static String secretKey = "NI5NF7HYUT9EU51KI1R10A9XWLCP46Z5";
+    public static String vnp_TmnCode = "MHK69BU3";
+    public static String secretKey = "6F6PR8ERL33VSFH7BWYJAHKM2OY2F72Q";
     public static String vnp_Version = "2.1.0";
     public static String vnp_Command = "pay";
 
     public static String hmacSHA512(final String key, final String data) {
-        try {
 
+        try {
             if (key == null || data == null) {
                 throw new NullPointerException();
             }
@@ -27,28 +27,32 @@ public class VNPayConfig {
             hmac512.init(secretKey);
             byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
             byte[] result = hmac512.doFinal(dataBytes);
-            StringBuilder sb = new StringBuilder(2 * result.length);
+            StringBuilder hash = new StringBuilder(2 * result.length);
             for (byte b : result) {
-                sb.append(String.format("%02x", b & 0xff));
+                hash.append(String.format("%02x", b & 0xff));
             }
-            return sb.toString();
+            return hash.toString();
 
         } catch (Exception ex) {
             return "";
         }
+
     }
 
     public static String getIpAddress(HttpServletRequest request) {
+
         String ipAdress;
         try {
             ipAdress = request.getHeader("X-FORWARDED-FOR");
             if (ipAdress == null) {
                 ipAdress = request.getRemoteAddr();
             }
+
         } catch (Exception e) {
             ipAdress = "Invalid IP:" + e.getMessage();
         }
         return ipAdress;
+
     }
 
     public static String getRandomNumber(int len) {

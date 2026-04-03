@@ -3,6 +3,7 @@ package com.BTL_JAVA.BTL.Service.Payment;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.PaymentResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayApiResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayPaymentResponse;
+import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayRedirectInfo;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
 import com.BTL_JAVA.BTL.Entity.Orders.OrderDetail;
 import com.BTL_JAVA.BTL.Entity.Payment;
@@ -130,7 +131,7 @@ public class PaymentService {
     }
 
     @Transactional
-    public VNPayApiResponse handleVNPayReturn(Map<String, String> params){
+    public VNPayRedirectInfo handleVNPayReturn(Map<String, String> params){
 
         String responseCode = params.get("vnp_ResponseCode");
         String txnRef = params.get("vnp_TxnRef");
@@ -149,21 +150,24 @@ public class PaymentService {
 
             order.setStatus(OrderStatus.APPROVED);
 
-            return VNPayApiResponse.builder()
-                    .code("OK")
-                    .message("Thanh toán thành công! Đơn hàng #" + order.getId() + " đã được xác nhận.")
-                    .data(null)
-                    .build();
+            return new VNPayRedirectInfo(true, order.getId());
+
+//            return VNPayApiResponse.builder()
+//                    .code("OK")
+//                    .message("Thanh toán thành công! Đơn hàng #" + order.getId() + " đã được xác nhận.")
+//                    .build();
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setResponseData(params.toString());
 
             cancelOrder(order);
 
-            return VNPayApiResponse.builder()
-                    .code("NO")
-                    .message("\"Thanh toán thất bại! Đơn hàng #" + order.getId() + " đã bị huỷ. Mã lỗi: " + responseCode)
-                    .build();
+            return new VNPayRedirectInfo(false, order.getId());
+
+//            return VNPayApiResponse.builder()
+//                    .code("NO")
+//                    .message("\"Thanh toán thất bại! Đơn hàng #" + order.getId() + " đã bị huỷ. Mã lỗi: " + responseCode)
+//                    .build();
         }
 
     }

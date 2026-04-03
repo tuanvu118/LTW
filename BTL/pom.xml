@@ -164,6 +164,12 @@
         </dependency>
 
         <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+            <version>3.52.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.google.genai</groupId>
             <artifactId>google-genai</artifactId>
             <version>1.45.0</version>

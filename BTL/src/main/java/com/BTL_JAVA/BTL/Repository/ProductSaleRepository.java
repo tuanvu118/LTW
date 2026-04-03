@@ -29,4 +29,14 @@ public interface ProductSaleRepository extends JpaRepository<ProductSale, Intege
     );
     List<ProductSale> findByProduct(Product product);
 
+    @Query("SELECT ps FROM ProductSale ps " +
+            "JOIN FETCH ps.sale s " +
+            "WHERE ps.product.productId IN :productIds " +
+            "AND s.stDate <= :now " +
+            "AND s.endDate >= :now " +
+            "ORDER BY ps.saleValue DESC")
+    List<ProductSale> findActiveSalesByProductIds(
+            @Param("productIds") List<Integer> productIds,
+            @Param("now") LocalDateTime now);
+
 }

@@ -3,6 +3,7 @@ import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayApiResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayPaymentResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.PaymentResponse;
+import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayRedirectInfo;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
 import com.BTL_JAVA.BTL.Entity.Orders.OrderDetail;
 import com.BTL_JAVA.BTL.Entity.Payment;
@@ -17,12 +18,16 @@ import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.servlet.view.RedirectView;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +40,10 @@ import java.util.*;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class PaymentController {
+
+    @Value("${frontend.url}")
+    @NonFinal
+    String frontendUrl;
 
     PaymentService paymentService;
 
@@ -62,14 +71,13 @@ public class PaymentController {
 
     }
 
-    @Transactional
     @GetMapping("/payment_infor")
-    public ApiResponse<VNPayApiResponse> paymentInfor(
-            @RequestParam Map<String, String> params)
-    {
-
-        return ApiResponse.ok(paymentService.handleVNPayReturn(params));
-
+    public RedirectView paymentInfor(@RequestParam Map<String, String> params) {
+        VNPayRedirectInfo redirectInfo = paymentService.handleVNPayReturn(params);
+        String url = frontendUrl + "user?payment=" +
+                (redirectInfo.isSuccess() ? "success" : "failed") +
+                "&orderCode=" + redirectInfo.getOrderId();
+        return new RedirectView(url);
     }
 
     @PutMapping("/{paymentId}/status")

@@ -4,6 +4,9 @@ import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayPaymentResponse;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
 import com.BTL_JAVA.BTL.configuration.VNPayConfig;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
@@ -12,7 +15,11 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 @Service
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class VNPayService {
+
+    VNPayConfig vnPayConfig;
 
     public VNPayPaymentResponse createPaymentUrl(Order order, String bankCode, HttpServletRequest request){
 
@@ -23,9 +30,9 @@ public class VNPayService {
         String ip = VNPayConfig.getIpAddress(request);
 
         Map<String, String> params = new HashMap<>();
-        params.put("vnp_Version", VNPayConfig.vnp_Version);
-        params.put("vnp_Command", VNPayConfig.vnp_Command);
-        params.put("vnp_TmnCode", VNPayConfig.vnp_TmnCode);
+        params.put("vnp_Version", vnPayConfig.getVnp_Version());
+        params.put("vnp_Command", vnPayConfig.getVnp_Command());
+        params.put("vnp_TmnCode", vnPayConfig.getVnp_TmnCode());
         params.put("vnp_Amount", String.valueOf(vnpAmount));
         params.put("vnp_CurrCode", "VND");
         params.put("vnp_BankCode", bankCode);
@@ -33,7 +40,7 @@ public class VNPayService {
         params.put("vnp_OrderInfo", "Thanh toan don hang: " + order.getId() + "Ma: " + txnRef);
         params.put("vnp_OrderType", "other");
         params.put("vnp_Locale", "vn");
-        params.put("vnp_ReturnUrl", VNPayConfig.vnp_ReturnUrl);
+        params.put("vnp_ReturnUrl", vnPayConfig.getVnp_ReturnUrl());
         params.put("vnp_IpAddr", ip);
 
         Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
@@ -74,10 +81,10 @@ public class VNPayService {
             }
         }
 
-        String securedHash = VNPayConfig.hmacSHA512(VNPayConfig.secretKey, hashData.toString());
+        String securedHash = VNPayConfig.hmacSHA512(vnPayConfig.getSecretKey(), hashData.toString());
         query.append("&vnp_SecureHash=").append(securedHash);
 
-        String paymentUrl = VNPayConfig.vnp_PayUrl + "?" + query;
+        String paymentUrl = vnPayConfig.getVnp_PayUrl() + "?" + query;
 
         return VNPayPaymentResponse.builder()
                 .code("00")

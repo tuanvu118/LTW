@@ -1,19 +1,45 @@
 package com.BTL_JAVA.BTL.configuration;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+@Component
 public class VNPayConfig {
-    public static String vnp_PayUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-    public static String vnp_ReturnUrl = "http://localhost:8080/api/payment/payment_infor";
-    public static String vnp_TmnCode = "MHK69BU3";
-    public static String secretKey = "6F6PR8ERL33VSFH7BWYJAHKM2OY2F72Q";
-    public static String vnp_Version = "2.1.0";
-    public static String vnp_Command = "pay";
+
+    @Value("${vnpay.pay-url:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}")
+    private String vnp_PayUrl;
+
+    @Value("${backend.url}")
+    private String backendUrl;
+
+    @Value("${vnpay.return-path:api/payment/payment_infor}")
+    private String returnPath;
+
+    @Value("${vnpay.tmn-code:MHK69BU3}")
+    private String vnp_TmnCode;
+
+    @Value("${vnpay.secret-key:6F6PR8ERL33VSFH7BWYJAHKM2OY2F72Q}")
+    private String secretKey;
+
+    @Value("${vnpay.version:2.1.0}")
+    private String vnp_Version;
+
+    @Value("${vnpay.command:pay}")
+    private String vnp_Command;
+
+    public String getVnp_PayUrl() { return vnp_PayUrl; }
+    public String getVnp_ReturnUrl() { return backendUrl + returnPath; }
+    public String getVnp_TmnCode() { return vnp_TmnCode; }
+    public String getSecretKey() { return secretKey; }
+    public String getVnp_Version() { return vnp_Version; }
+    public String getVnp_Command() { return vnp_Command; }
 
     public static String hmacSHA512(final String key, final String data) {
 
@@ -64,5 +90,6 @@ public class VNPayConfig {
         }
         return sb.toString();
     }
+
 }
 

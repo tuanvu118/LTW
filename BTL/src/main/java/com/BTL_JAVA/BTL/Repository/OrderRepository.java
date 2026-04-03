@@ -48,4 +48,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
            "LEFT JOIN FETCH o.user " +
            "WHERE o.status = :status")
     List<Order> findByStatusWithDetails(@Param("status") OrderStatus status);
+
+
+
 }

@@ -72,7 +72,10 @@ public enum ErrorCode {
     PAYMENT_NOT_FOUND(7001, "Khong thay thong tin payment", HttpStatus.NOT_FOUND),
     INVALID_PAYMENT_METHOD(7002, "Phương thức thanh toán không hợp lệ", HttpStatus.BAD_REQUEST),
     // ===== Misc (9xxx) =====
-    UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR);
+    SYSTEM_BUSY(9001, "Hệ thống đang bận, vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS),
+    SYSTEM_ERROR(9002, "Lỗi gián đoạn luồng hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR),
+    UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR),
+    ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
         this.code = code;

@@ -30,7 +30,6 @@ public class ChatMessageService {
     ConversationRepository conversationRepository;
     ChatMessageRepository chatMessageRepository;
     UserRepository userRepository;
-    ConversationService conversationService;
     SimpMessagingTemplate messagingTemplate;
 
 
@@ -63,20 +62,18 @@ public class ChatMessageService {
         final int ADMIN_ID = ConversationService.DEFAULT_ADMIN_ID;
         User sender = userRepository.findById(req.getSenderId()).orElseThrow();
 
-        final int userId;
-        if (Objects.equals(sender.getId(), ADMIN_ID)) {
-            // Admin gửi: bắt buộc targetUserId
-            if (req.getReceiverId() == null) {
-                throw new IllegalArgumentException("Admin gửi tin phải chỉ định targetUserId");
-            }
-            userId = req.getReceiverId();
-        } else {
-            // User gửi: luôn chat với admin cố định
-            userId = sender.getId();
+        if (req.getConversationId() == null) {
+            throw new IllegalArgumentException("conversationId là bắt buộc khi gửi tin nhắn");
         }
 
-        // Luôn đảm bảo có phòng user <-> admin
-        Conversation conv = conversationService.addConversation(userId);
+        Conversation conv = conversationRepository.findById(req.getConversationId()).orElseThrow();
+
+        // Quyền: user chỉ được gửi trong conversation thuộc về mình,
+        // admin (ADMIN_ID) có thể gửi vào bất kỳ conversation nào.
+        if (!Objects.equals(sender.getId(), ADMIN_ID)
+                && !Objects.equals(conv.getUser().getId(), sender.getId())) {
+            throw new IllegalArgumentException("conversationId không thuộc về user hiện tại");
+        }
 
         // Lưu message
         Message m = new Message();
@@ -104,6 +101,14 @@ public class ChatMessageService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> listByConversation(int conversationId, int viewerId) {
+        Conversation conv = conversationRepository.findById(conversationId).orElseThrow();
+
+        // User chỉ được xem conversation thuộc về mình; admin xem được tất cả.
+        if (viewerId != ConversationService.DEFAULT_ADMIN_ID
+                && conv.getUser().getId() != viewerId) {
+            throw new IllegalArgumentException("viewerId không có quyền xem conversation này");
+        }
+
         var messages = chatMessageRepository
                 .findAllByConversationConversationIdOrderByCreatedAtAsc(conversationId);
         return messages.stream()

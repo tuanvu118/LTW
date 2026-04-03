@@ -4,11 +4,13 @@ import com.BTL_JAVA.BTL.DTO.Request.Auth.*;
 import com.BTL_JAVA.BTL.DTO.Response.Auth.AuthenticationResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Auth.IntrospectResponse;
 import com.BTL_JAVA.BTL.Entity.InvalidtedToken;
+import com.BTL_JAVA.BTL.Entity.PasswordResetToken;
 import com.BTL_JAVA.BTL.Entity.Role;
 import com.BTL_JAVA.BTL.Entity.User;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.InvalidtedTokenRepository;
+import com.BTL_JAVA.BTL.Repository.PasswordResetTokenRepository;
 import com.BTL_JAVA.BTL.Repository.httpclient.OutboundIdentityClient;
 import com.BTL_JAVA.BTL.Repository.UserRepository;
 import com.BTL_JAVA.BTL.Repository.httpclient.OutboundUserClient;
@@ -24,11 +26,15 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -39,11 +45,16 @@ import java.util.*;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AuthenticationService {
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     UserRepository userRepository;
     OutboundIdentityClient outboundIdentityClient;
     InvalidtedTokenRepository invalidtedTokenRepository;
     OutboundUserClient outboundUserClient;
     RoleRepository roleRepository;
+    PasswordResetTokenRepository passwordResetTokenRepository;
+    EmailService emailService;
+    PasswordEncoder passwordEncoder;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -71,6 +82,14 @@ public class AuthenticationService {
 
     @NonFinal
     protected String GRANT_TYPE = "authorization_code";
+
+    @NonFinal
+    @Value("${app.reset-password.base-url:http://localhost:5173/reset-password}")
+    protected String RESET_PASSWORD_BASE_URL;
+
+    @NonFinal
+    @Value("${app.reset-password.expiry-minutes:15}")
+    protected long RESET_PASSWORD_EXPIRY_MINUTES;
 
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         var token=request.getToken();
@@ -134,7 +153,6 @@ public class AuthenticationService {
           var user = userRepository.findByFullName(request.getFullName())
                   .orElseThrow(() ->new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        PasswordEncoder  passwordEncoder = new BCryptPasswordEncoder(10);
         boolean authenticate= passwordEncoder.matches(request.getPassword(), user.getPassword());
         if(!authenticate){
             throw new AppException(ErrorCode.USER_NOT_EXISTED);
@@ -146,6 +164,66 @@ public class AuthenticationService {
                 .authenticated(true)
                 .build();
 
+    }
+
+    @Transactional
+    public void requestPasswordReset(ForgotPasswordRequest request) {
+        if (request == null || request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            return;
+        }
+
+        Optional<User> userOptional = userRepository.findByEmail(request.getEmail().trim());
+        if (userOptional.isEmpty()) {
+            return;
+        }
+
+        User user = userOptional.get();
+        passwordResetTokenRepository.deleteByUser(user);
+
+        String rawToken = generateResetToken();
+        String tokenHash = hashToken(rawToken);
+
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .tokenHash(tokenHash)
+                .user(user)
+                .expiryTime(Instant.now().plus(RESET_PASSWORD_EXPIRY_MINUTES, ChronoUnit.MINUTES))
+                .used(false)
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        String resetLink = buildResetLink(rawToken);
+        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (request == null || request.getToken() == null || request.getToken().trim().isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_RESET_TOKEN);
+        }
+
+        if (request.getNewPassword() == null || request.getNewPassword().trim().isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_PASSWORD);
+        }
+
+        String tokenHash = hashToken(request.getToken().trim());
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_RESET_TOKEN));
+
+        if (resetToken.isUsed()) {
+            throw new AppException(ErrorCode.INVALID_RESET_TOKEN);
+        }
+
+        if (resetToken.getExpiryTime().isBefore(Instant.now())) {
+            passwordResetTokenRepository.delete(resetToken);
+            throw new AppException(ErrorCode.EXPIRED_RESET_TOKEN);
+        }
+
+        User user = resetToken.getUser();
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
     }
 
     public void logout(LogoutRequest request) throws ParseException, JOSEException {
@@ -254,6 +332,31 @@ public class AuthenticationService {
         });
 
         return stringJoiner.toString();
+    }
+
+    private String generateResetToken() {
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte b : hash) {
+                result.append(String.format("%02x", b));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String buildResetLink(String rawToken) {
+        String delimiter = RESET_PASSWORD_BASE_URL.contains("?") ? "&" : "?";
+        return RESET_PASSWORD_BASE_URL + delimiter + "token=" + rawToken;
     }
 
 }

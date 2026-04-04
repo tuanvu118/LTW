@@ -1,7 +1,6 @@
 package com.BTL_JAVA.BTL.Service.Payment;
 
 import com.BTL_JAVA.BTL.DTO.Response.Payment.PaymentResponse;
-import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayApiResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayPaymentResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Payment.VNPayRedirectInfo;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
@@ -12,6 +11,7 @@ import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.OrderRepository;
 import com.BTL_JAVA.BTL.Repository.PaymentRepository;
+import com.BTL_JAVA.BTL.configuration.VNPayConfig;
 import com.BTL_JAVA.BTL.enums.OrderStatus;
 import com.BTL_JAVA.BTL.enums.PaymentStatus;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +33,7 @@ public class PaymentService {
     PaymentRepository paymentRepository;
     OrderRepository orderRepository;
     VNPayService vnPayService;
+    private final VNPayConfig vnPayConfig;
 
     @Transactional
     public Object createPayment(Integer orderId, String paymentMethod, String bankCode, HttpServletRequest request){
@@ -142,7 +143,15 @@ public class PaymentService {
 
         Order order = payment.getOrder();
 
-        if(responseCode.equals("00")){
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            boolean success = (payment.getStatus() == PaymentStatus.COMPLETED);
+            return VNPayRedirectInfo.builder()
+                    .success(success)
+                    .orderId(order.getId())
+                    .build();
+        }
+
+        if(responseCode.equals("00") && VNPayConfig.verifySignatureKey(params, vnPayConfig.getSecretKey())){
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setTransactionId(transactionNo);
             payment.setPaymentDate(LocalDateTime.now());
@@ -151,11 +160,6 @@ public class PaymentService {
             order.setStatus(OrderStatus.APPROVED);
 
             return new VNPayRedirectInfo(true, order.getId());
-
-//            return VNPayApiResponse.builder()
-//                    .code("OK")
-//                    .message("Thanh toán thành công! Đơn hàng #" + order.getId() + " đã được xác nhận.")
-//                    .build();
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setResponseData(params.toString());
@@ -163,11 +167,6 @@ public class PaymentService {
             cancelOrder(order);
 
             return new VNPayRedirectInfo(false, order.getId());
-
-//            return VNPayApiResponse.builder()
-//                    .code("NO")
-//                    .message("\"Thanh toán thất bại! Đơn hàng #" + order.getId() + " đã bị huỷ. Mã lỗi: " + responseCode)
-//                    .build();
         }
 
     }

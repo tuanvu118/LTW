@@ -2,11 +2,11 @@ package com.BTL_JAVA.BTL.configuration;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -89,6 +89,35 @@ public class VNPayConfig {
             sb.append(chars.charAt(rnd.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    public static boolean verifySignatureKey(Map<String, String> params, String secretKey) {
+
+        String receivedHash = params.get("vnp_SecureHash");
+        if(receivedHash == null) return false;
+
+        Map<String, String> sortedParams = new TreeMap<>(params);
+        sortedParams.remove("vnp_SecureHash");
+        sortedParams.remove("vnp_SecureHashType");
+
+        StringBuilder hashData = new StringBuilder();
+        try {
+            for(Map.Entry<String, String> entry : sortedParams.entrySet()){
+                if(entry.getValue() != null && !entry.getValue().isEmpty()){
+                    hashData.append(entry.getKey())
+                            .append('=')
+                            .append(URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+                    hashData.append('&');
+                }
+            }
+            if(!hashData.isEmpty()) hashData.deleteCharAt(hashData.length() - 1);
+        } catch (Exception e){
+            return false;
+        }
+
+        String calculatedHash = hmacSHA512(secretKey, hashData.toString());
+        return calculatedHash.equals(receivedHash);
+
     }
 
 }

@@ -19,11 +19,19 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -35,6 +43,13 @@ public class SalesService {
     SalesRepository salesRepository;
     ProductRepository productRepository;
     ProductSaleRepository productSaleRepository;
+
+    RedisTemplate<String, Object> redisTemplate;
+    RedissonClient redissonClient;
+
+    static String DISCOUNT_CACHE_PREFIX = "product:discount:";
+    static String DISCOUNT_LOCK_PREFIX = "lock:discount:";
+    static String NULL_VALUE = "NOT_EXIST";
 
     public ApiResponse<List<SalesResponse>> getAllSales(Boolean active) {
         try {
@@ -59,6 +74,55 @@ public class SalesService {
         } catch (Exception e) {
             throw new AppException(ErrorCode.SALES_NOT_FOUND);
         }
+    }
+
+    public Map<Integer, BigDecimal> getLastestDiscountMap(List<Integer> productIds){
+
+        Map<Integer, BigDecimal> resultMap = new HashMap<>();
+        if(productIds == null || productIds.isEmpty()) return resultMap;
+
+        // Lấy dữ liệu từ cache
+        List<String> keys = productIds.stream()
+                .map(id -> DISCOUNT_CACHE_PREFIX + id)
+                .toList();
+        List<Object> cacheValues = redisTemplate.opsForValue().multiGet(keys);
+
+        List<Integer> missIds = new ArrayList<>();
+
+        // Validate variation không tồn tại
+        for(int i = 0; i < productIds.size(); i++){
+            Integer productId = productIds.get(i);
+            Object cacheValue = cacheValues != null ? cacheValues.get(i) : null;
+
+            if(cacheValue != null){
+                if(cacheValue.equals(NULL_VALUE)){
+                    log.warn("Product ID {} marked as NOT EXIST in cache", productId);
+                    continue;
+                }
+                resultMap.put(productId, new BigDecimal(cacheValue.toString()));
+            }
+            else{
+                missIds.add(productId);
+            }
+        }
+
+        // Cache miss
+        if(!missIds.isEmpty()){
+            for(Integer pId : missIds){
+                try{
+                    BigDecimal discount = getDiscountWithLock(pId);
+                    resultMap.put(pId, discount);
+                } catch (AppException e){
+                    if(e.getErrorCode() == ErrorCode.PRODUCT_NOT_FOUND){
+                        continue; //Bỏ qua sản phẩm ảo
+                    }
+                    throw e;
+                }
+            }
+        }
+
+        return resultMap;
+
     }
 
     @Transactional
@@ -94,6 +158,12 @@ public class SalesService {
             Sales sale = salesRepository.findById(id)
                     .orElseThrow(() -> new AppException(ErrorCode.SALE_NOT_EXISTED));
 
+            List<Integer> affectedProductIds = new ArrayList<>();
+            if(sale.getProductSales() != null){
+                sale.getProductSales().forEach(ps ->
+                        affectedProductIds.add(ps.getProduct().getProductId()));
+            }
+
             if (request.getStDate() != null || request.getEndDate() != null) {
                 LocalDateTime newStDate = request.getStDate() != null ? request.getStDate() : sale.getStDate();
                 LocalDateTime newEndDate = request.getEndDate() != null ? request.getEndDate() : sale.getEndDate();
@@ -126,7 +196,15 @@ public class SalesService {
             // XỬ LÝ THÊM PRODUCTS MỚI
             if (request.getAddProducts() != null && !request.getAddProducts().isEmpty()) {
                 addProductsToSale(saved, request.getAddProducts());
+
+                affectedProductIds.addAll(
+                        request.getAddProducts().stream()
+                                .map(ProductSaleItemRequest::getProductId)
+                                .toList()
+                );
             }
+
+            clearCache(affectedProductIds);
 
             return ApiResponse.<SalesResponse>builder()
                     .result(toResponse(saved, isActive))
@@ -143,11 +221,18 @@ public class SalesService {
         try {
             Sales sale = salesRepository.findById(id)
                     .orElseThrow(() -> new AppException(ErrorCode.SALE_NOT_EXISTED));
+
+            List<Integer> affectedIds = sale.getProductSales().stream()
+                    .map(ps -> ps.getProduct().getProductId())
+                    .toList();
+
             if (!sale.getProductSales().isEmpty()) {
                 productSaleRepository.deleteAll(sale.getProductSales());
             }
 
             salesRepository.delete(sale);
+
+            clearCache(affectedIds);
 
             return ApiResponse.<Void>builder()
                     .result(null)
@@ -231,6 +316,78 @@ public class SalesService {
         if (value.compareTo(BigDecimal.ZERO) < 0 || value.compareTo(new BigDecimal("0.99")) > 0) {
             throw new AppException(ErrorCode.INVALID_SALE_VALUE);
         }
+    }
+
+    private BigDecimal getDiscountWithLock(Integer productId){
+
+        String cacheKey = DISCOUNT_CACHE_PREFIX + productId;
+        String lockKey = DISCOUNT_LOCK_PREFIX + productId;
+
+        // Validate product không tồn tại
+        Object cacheValue = redisTemplate.opsForValue().get(cacheKey);
+        if (cacheValue != null) {
+            if (cacheValue.equals(NULL_VALUE)){
+                throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+            }
+            return new BigDecimal(cacheValue.toString());
+        }
+
+        RLock lock = redissonClient.getLock(lockKey);
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    cacheValue = redisTemplate.opsForValue().get(cacheKey);
+                    if(cacheValue != null){
+                        if(cacheValue.equals(NULL_VALUE)){
+                            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                        }
+                        return new BigDecimal(cacheValue.toString());
+                    }
+
+                    log.info("Cache miss for Discount ID {}, reading from DB...", productId);
+
+                    // Kiểm tra xem PRODUCT có sale không
+                    if(!productRepository.existsById(productId)){
+                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(5));
+                        throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                    }
+
+                    LocalDateTime now = LocalDateTime.now();
+                    List<ProductSale> activeProductSales = productSaleRepository
+                            .findActiveSalesByProductIds(List.of(productId), now);
+
+                    BigDecimal maxDiscount = activeProductSales.stream()
+                            .map(ProductSale::getSaleValue)
+                            .max(BigDecimal::compareTo)
+                            .orElse(BigDecimal.ZERO);
+
+                    redisTemplate.opsForValue().set(cacheKey, maxDiscount, Duration.ofMinutes(30));
+
+                    return maxDiscount;
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else {
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
+    }
+
+    public void clearCache(List<Integer> productIds){
+
+        if(productIds == null || productIds.isEmpty()) return;
+        List<String> keys = productIds.stream()
+                .map(id -> DISCOUNT_CACHE_PREFIX + id)
+                .toList();
+        redisTemplate.delete(keys);
+
     }
 
     private SalesResponse toResponse(Sales sales, boolean isActive) {

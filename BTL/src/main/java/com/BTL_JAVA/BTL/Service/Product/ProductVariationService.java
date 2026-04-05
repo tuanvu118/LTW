@@ -16,98 +16,178 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ProductVariationService {
+
     ProductVariationRepository productVariationRepository;
     ProductRepository productRepository;
     UploadImageFile uploadImageFile;
 
-    public ApiResponse<ProductVariationResponse> create(ProductVariationCreationRequest req) throws IOException {
-        if (req.getProductId() == null||req.getSize()==null||req.getColor()==null) {
+    RedisTemplate<String, Object> redisTemplate;
+    RedissonClient redissonClient;
+
+    static String CACHE_KEY_PREFIX = "variation:";
+    static String LOCK_KEY_PREFIX = "lock:variation:";
+    static String NULL_VALUE = "NOT_EXIST";
+
+    public ApiResponse<ProductVariationResponse> create(ProductVariationCreationRequest request) throws IOException {
+
+        if (request.getProductId() == null||request.getSize()==null||request.getColor()==null) {
             throw new AppException(ErrorCode.INVALID_VARIATION);
         }
 
-        if(productVariationRepository.existsByProduct_ProductIdAndSizeIgnoreCaseAndColorIgnoreCase(req.getProductId(), req.getSize(), req.getColor())) {
+        if(productVariationRepository.existsByProduct_ProductIdAndSizeIgnoreCaseAndColorIgnoreCase(request.getProductId(), request.getSize(), request.getColor())) {
             throw new AppException(ErrorCode.DUPLICATE_VARIATION);
         }
 
-        Product productRef = productRepository.getReferenceById(req.getProductId());
+        Product productRef = productRepository.getReferenceById(request.getProductId());
 
         ProductVariation pv = ProductVariation.builder()
                 .product(productRef)
-                .size(req.getSize())
-                .color(req.getColor())
-                .stockQuantity(req.getStockQuantity() == null ? 0 : req.getStockQuantity())
+                .size(request.getSize())
+                .color(request.getColor())
+                .stockQuantity(request.getStockQuantity() == null ? 0 : request.getStockQuantity())
                 .build();
 
-        if (req.getImage() != null && !req.getImage().isEmpty()) {
-            String url = uploadImageFile.uploadImage(req.getImage());
+        if (request.getImage() != null && !request.getImage().isEmpty()) {
+            String url = uploadImageFile.uploadImage(request.getImage());
             pv.setImage(url);
         }
 
         ProductVariation saved = productVariationRepository.save(pv);
+
+        clearCache(saved.getId());
+
         return ApiResponse.ok(toResponse(saved));
+
     }
 
     // UPDATE (partial + có thể chuyển sang product khác)
     @Transactional
-    public ApiResponse<ProductVariationResponse> update(Integer id, ProductVariationUpdateRequest req) throws IOException {
+    public ApiResponse<ProductVariationResponse> update(Integer id, ProductVariationUpdateRequest request) throws IOException {
 
         ProductVariation pv = productVariationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VARIATION_NOT_FOUND));
 
-        Integer productId = req.getProductId() != null ? req.getProductId()
+        Integer productId = request.getProductId() != null ? request.getProductId()
                 : (pv.getProduct() != null ? pv.getProduct().getProductId() : null);
 
-        String size  = req.getSize()  != null ? req.getSize().trim()  : pv.getSize();
-        String color = req.getColor() != null ? req.getColor().trim() : pv.getColor();
+        String size  = request.getSize()  != null ? request.getSize().trim()  : pv.getSize();
+        String color = request.getColor() != null ? request.getColor().trim() : pv.getColor();
 
         if (productVariationRepository
                 .existsByProduct_ProductIdAndSizeIgnoreCaseAndColorIgnoreCaseAndIdNot(productId, size, color, id)) {
             throw new AppException(ErrorCode.DUPLICATE_VARIATION);
         }
 
-
-        if (req.getProductId() != null) {
-            Product productRef = productRepository.getReferenceById(req.getProductId());
+        if (request.getProductId() != null) {
+            Product productRef = productRepository.getReferenceById(request.getProductId());
             pv.setProduct(productRef);
         }
-        if (req.getSize() != null)          pv.setSize(req.getSize());
-        if (req.getColor() != null)         pv.setColor(req.getColor());
-        if (req.getStockQuantity() != null) pv.setStockQuantity(req.getStockQuantity());
 
-        if (req.getImage() != null && !req.getImage().isEmpty()) {
-            String url = uploadImageFile.uploadImage(req.getImage());
+        if (request.getSize() != null)          pv.setSize(request.getSize());
+        if (request.getColor() != null)         pv.setColor(request.getColor());
+        if (request.getStockQuantity() != null) pv.setStockQuantity(request.getStockQuantity());
+
+        if (request.getImage() != null && !request.getImage().isEmpty()) {
+            String url = uploadImageFile.uploadImage(request.getImage());
             pv.setImage(url);
         }
 
         ProductVariation saved = productVariationRepository.save(pv);
-        return ApiResponse.ok(toResponse(saved));
-    }
 
+        clearCache(id);
+
+        return ApiResponse.ok(toResponse(saved));
+
+    }
 
     @Transactional
     public ApiResponse<Void> delete(Integer id) {
+
         ProductVariation pv = productVariationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VARIATION_NOT_FOUND));
         productVariationRepository.delete(pv);
+        clearCache(id);
         return ApiResponse.ok(null);
+
     }
 
-
-
     public ApiResponse<ProductVariationResponse> get(Integer id) {
-        ProductVariation pv = productVariationRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.VARIATION_NOT_FOUND));
-        return ApiResponse.ok(toResponse(pv));
+
+        String cacheKey = CACHE_KEY_PREFIX + id;
+
+        // Lấy dữ liệu từ cache
+        Object cachedValue = redisTemplate.opsForValue().get(cacheKey);
+
+        // Validate variation không tồn tại
+        if(cachedValue != null){
+            if(cachedValue.equals(NULL_VALUE)){
+                throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
+            }
+            return ApiResponse.ok((ProductVariationResponse) cachedValue);
+        }
+
+        // Cache miss
+        String lockKey = LOCK_KEY_PREFIX + id;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    cachedValue = redisTemplate.opsForValue().get(cacheKey);
+                    if(cachedValue != null){
+                        if(cachedValue.equals(NULL_VALUE)){
+                            throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
+                        }
+                        return ApiResponse.ok((ProductVariationResponse) cachedValue);
+                    }
+
+                    log.info("Cache miss for ID {}, reading from DB...", id);
+                    ProductVariation pv = productVariationRepository.findById(id)
+                            .orElse(null);
+                    if(pv == null){
+                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(5));
+                        throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
+                    }
+
+                    ProductVariationResponse response = toResponse(pv);
+                    redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(30));
+
+                    return ApiResponse.ok(response);
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
+    }
+
+    public void clearCache(Integer id){
+        String cacheKey = CACHE_KEY_PREFIX + id;
+        redisTemplate.delete(cacheKey);
+        log.info("Cleared cache for Variation ID: {}", id);
     }
 
 
@@ -128,5 +208,6 @@ public class ProductVariationService {
                 .image(pv.getImage())
                 .build();
     }
+
 }
 

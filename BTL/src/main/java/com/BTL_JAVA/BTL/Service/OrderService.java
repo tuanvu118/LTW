@@ -3,6 +3,7 @@ package com.BTL_JAVA.BTL.Service;
 import com.BTL_JAVA.BTL.DTO.Request.Order.OrderRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Order.OrderUpdateRequest;
 import com.BTL_JAVA.BTL.DTO.Response.OrderResponse;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.Entity.Address;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
 import com.BTL_JAVA.BTL.Entity.Orders.OrderDetail;
@@ -13,6 +14,8 @@ import com.BTL_JAVA.BTL.Entity.User;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.*;
+import com.BTL_JAVA.BTL.Service.Product.ProductVariationService;
+import com.BTL_JAVA.BTL.Service.Product.SalesService;
 import com.BTL_JAVA.BTL.enums.OrderStatus;
 import com.BTL_JAVA.BTL.enums.PaymentStatus;
 import jakarta.transaction.Transactional;
@@ -26,6 +29,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -50,8 +54,16 @@ public class OrderService {
     ProductVariationRepository productVariationRepository;
     ProductSaleRepository productSaleRepository;
 
+    RedisTemplate<String, Object> redisTemplate;
     RedissonClient redissonClient;
     TransactionTemplate transactionTemplate;
+
+    ProductVariationService variationCacheService;
+    SalesService salesCacheService;
+
+    static String VARIATION_CACHE_PREFIX = "variation:";
+    static String LOCK_KEY_PREFIX = "lock:variation:";
+    static String NULL_VALUE = "NOT_EXIST";
 
     // Các phương thức lấy người và ktra quyền
     private User getCurrentAuthenticatedUser() {
@@ -90,7 +102,7 @@ public class OrderService {
 
         // 3. Chuẩn bị MultiLock cho tất cả item trong cart
         List<RLock> locks = sortedVariationIds.stream()
-                .map(id -> redissonClient.getLock("lock:variation:" + id))
+                .map(id -> redissonClient.getLock(LOCK_KEY_PREFIX + id))
                 .toList();
         RLock multiLock = redissonClient.getMultiLock(locks.toArray(new RLock[0]));
 
@@ -106,6 +118,8 @@ public class OrderService {
             // 5. Mở Transaction db bên trong khóa
             Order savedOrder = transactionTemplate.execute(status -> {
                 try {
+                    validateStockAndPriceWithCache(request);
+
                     return executeOrderCreationDBLogic(
                             user,
                             address,
@@ -123,6 +137,8 @@ public class OrderService {
 //                    }
                 }
             });
+
+            sortedVariationIds.forEach(variationCacheService::clearCache);
 
             return mapToOrderResponse(savedOrder);
 
@@ -143,28 +159,46 @@ public class OrderService {
 
     }
 
+    private void validateStockAndPriceWithCache(OrderRequest request){
+
+        List<String> keys = request.getItems().stream()
+                .map(item -> VARIATION_CACHE_PREFIX + item.getVariationId())
+                .toList();
+
+        List<Object> cachedValue = redisTemplate.opsForValue().multiGet(keys);
+
+        for(int i = 0; i < request.getItems().size(); i++){
+            OrderRequest.Item requestItem = request.getItems().get(i);
+            Object cachedVariation = cachedValue.get(i);
+
+            if(cachedVariation == null || cachedVariation.equals(NULL_VALUE)){
+                continue;
+            }
+
+            ProductVariationResponse response = (ProductVariationResponse) cachedVariation;
+
+            if(response.getStockQuantity() < requestItem.getQuantity()){
+                log.warn("Fail-fast: Variation {} out of stock in cache", response.getId());
+                throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+            }
+        }
+
+    }
+
     private Order executeOrderCreationDBLogic(User user, Address address, OrderRequest request, List<Integer> variationIds) {
 
-        // 1. Lấy tất cả Variations trong 1 câu Query
+        // 1. Lấy tất cả Variations trong 1 câu Query (Dữ liệu thật 100% để trừ kho)
         List<ProductVariation> variations = productVariationRepository.findAllByIdsWithProduct(variationIds);
         Map<Integer, ProductVariation> variationMap = variations.stream()
                 .collect(Collectors.toMap(ProductVariation::getId, v -> v));
 
-        // 2. Lấy tất cả Sales đang active trong 1 câu Query
+        // 2. Tận dụng Cache Sale
         List<Integer> productIds = variations.stream()
                 .map(v -> v.getProduct().getProductId())
                 .distinct()
                 .collect(Collectors.toList());
 
-        List<ProductSale> activeSales = productSaleRepository.findActiveSalesByProductIds(productIds, LocalDateTime.now());
-
-        // Map: productId -> Mức giảm giá cao nhất
-        Map<Integer, BigDecimal> maxDiscountMap = activeSales.stream()
-                .collect(Collectors.toMap(
-                        sale -> sale.getProduct().getProductId(),
-                        ProductSale::getSaleValue,
-                        (v1, v2) -> v1.compareTo(v2) > 0 ? v1 : v2 // Lấy sale lớn nhất nếu có nhiều sale
-                ));
+        Map<Integer, BigDecimal> maxDiscountMap = salesCacheService.getLastestDiscountMap(productIds);
 
         Order order = Order.builder()
                 .user(user)
@@ -259,7 +293,7 @@ public class OrderService {
                 .toList();
 
         List<RLock> locks = sortedVariationIds.stream()
-                .map(id -> redissonClient.getLock("lock:variation:" + id))
+                .map(id -> redissonClient.getLock(LOCK_KEY_PREFIX + id))
                 .toList();
         RLock multiLock = redissonClient.getMultiLock(locks.toArray(new RLock[0]));
 

@@ -16,6 +16,10 @@ import com.BTL_JAVA.BTL.Repository.ProductSaleRepository;
 import com.BTL_JAVA.BTL.Repository.ProductVariationRepository;
 import com.BTL_JAVA.BTL.Repository.Spec.ProductSpecs;
 import com.BTL_JAVA.BTL.Service.Cloudinary.UploadImageFile;
+import com.BTL_JAVA.BTL.Service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +33,6 @@ import org.springframework.data.domain.Pageable;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -52,8 +55,8 @@ public class ProductService {
     UploadImageFile uploadImageFile;
     ProductSaleRepository  productSaleRepository;
 
-    RedisTemplate<String, Object> redisTemplate;
     RedissonClient redissonClient;
+    RedisService redisService;
 
     static String PRODUCT_DETAIL_CACHE = "product:detail:";
     static String PRODUCT_LIST_CACHE = "product:list:all";
@@ -192,17 +195,18 @@ public class ProductService {
 
         String cacheKey = PRODUCT_DETAIL_CACHE + id;
 
-        // Lấy dữ liệu từ cache
-        Object cacheValue = redisTemplate.opsForValue().get(cacheKey);
-
         // Validate product không tồn tại
+        String rawValue = redisService.getString(cacheKey);
+        if(NULL_VALUE.equals(rawValue)){
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        // Lấy dữ liệu từ cache
+        ProductDetailResponse cacheValue = redisService.get(cacheKey, ProductDetailResponse.class);
         if(cacheValue != null){
-            if(cacheValue.equals(NULL_VALUE)){
-                throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
-            }
             return ApiResponse.<ProductDetailResponse>builder()
                     .code(1000).message("Success")
-                    .result((ProductDetailResponse) cacheValue)
+                    .result(cacheValue)
                     .build();
         }
 
@@ -214,26 +218,28 @@ public class ProductService {
             if(lock.tryLock(5, TimeUnit.SECONDS)){
                 try{
                     // Double check
-                    cacheValue = redisTemplate.opsForValue().get(cacheKey);
+                    rawValue = redisService.getString(cacheKey);
+                    if(NULL_VALUE.equals(rawValue)){
+                        throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                    }
+
+                    cacheValue = redisService.get(cacheKey, ProductDetailResponse.class);
                     if(cacheValue != null){
-                        if(cacheValue.equals(NULL_VALUE)){
-                            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
-                        }
                         return ApiResponse.<ProductDetailResponse>builder()
                                 .code(1000).message("Success")
-                                .result((ProductDetailResponse) cacheValue)
+                                .result(cacheValue)
                                 .build();
                     }
 
                     log.info("Cache miss for Product ID {}, fetching from DB...", id);
                     Product product = productRepository.findById(id).orElse(null);
                     if(product == null){
-                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(30));
+                        redisService.set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
                         throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
                     }
 
                     ProductDetailResponse response = toDetailResponse(product);
-                    redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(30));
+                    redisService.set(cacheKey, response, Duration.ofMinutes(30));
 
                     return ApiResponse.<ProductDetailResponse>builder()
                             .code(1000).message("Success")
@@ -258,12 +264,12 @@ public class ProductService {
     public ApiResponse<List<ProductResponse>> list() {
 
         // Lấy dữ liệu từ cache
-        Object cacheList = redisTemplate.opsForValue().get(PRODUCT_LIST_CACHE);
+        List<ProductResponse> cacheList = redisService.getList(PRODUCT_LIST_CACHE, new TypeReference<>(){});
 
         if(cacheList != null){
             return ApiResponse.<List<ProductResponse>>builder()
                     .code(1000).message("Success")
-                    .result((List<ProductResponse>) cacheList)
+                    .result(cacheList)
                     .build();
         }
 
@@ -273,11 +279,11 @@ public class ProductService {
             if(lock.tryLock(5, TimeUnit.SECONDS)){
                 try{
                     // Double check
-                    cacheList = redisTemplate.opsForValue().get(PRODUCT_LIST_CACHE);
+                    cacheList = redisService.getList(PRODUCT_LIST_CACHE, new TypeReference<>(){});
                     if(cacheList != null){
                         return ApiResponse.<List<ProductResponse>>builder()
                                 .code(1000).message("Success")
-                                .result((List<ProductResponse>) cacheList)
+                                .result(cacheList)
                                 .build();
                     }
 
@@ -288,7 +294,7 @@ public class ProductService {
                             .map(this::toResponse)
                             .toList();
 
-                    redisTemplate.opsForValue().set(PRODUCT_LIST_CACHE, data, Duration.ofMinutes(30));
+                    redisService.set(PRODUCT_LIST_CACHE, data, Duration.ofMinutes(30));
 
                     return ApiResponse.<List<ProductResponse>>builder()
                             .code(1000).message("Success")
@@ -311,14 +317,14 @@ public class ProductService {
 
     public void clearProductCache(Integer id){
 
-        redisTemplate.delete(PRODUCT_DETAIL_CACHE + id);
+        redisService.delete(PRODUCT_DETAIL_CACHE + id);
         log.info("Cleared detail cache for product {}", id);
 
     }
 
     public void clearListCache(){
 
-        redisTemplate.delete(PRODUCT_LIST_CACHE);
+        redisService.delete(PRODUCT_LIST_CACHE);
         log.info("Cleared product list cache");
 
     }

@@ -161,7 +161,7 @@ public class ProductVariationService {
                     ProductVariation pv = productVariationRepository.findById(id)
                             .orElse(null);
                     if(pv == null){
-                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(5));
+                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
                         throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
                     }
 

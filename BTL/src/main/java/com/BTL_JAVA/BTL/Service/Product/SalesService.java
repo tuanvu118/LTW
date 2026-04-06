@@ -349,7 +349,7 @@ public class SalesService {
 
                     // Kiểm tra xem PRODUCT có sale không
                     if(!productRepository.existsById(productId)){
-                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(5));
+                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
                         throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
                     }
 

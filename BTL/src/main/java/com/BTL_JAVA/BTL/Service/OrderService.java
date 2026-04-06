@@ -18,6 +18,8 @@ import com.BTL_JAVA.BTL.Service.Product.ProductVariationService;
 import com.BTL_JAVA.BTL.Service.Product.SalesService;
 import com.BTL_JAVA.BTL.enums.OrderStatus;
 import com.BTL_JAVA.BTL.enums.PaymentStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -54,12 +56,13 @@ public class OrderService {
     ProductVariationRepository productVariationRepository;
     ProductSaleRepository productSaleRepository;
 
-    RedisTemplate<String, Object> redisTemplate;
+    ProductVariationService variationCacheService;
+    SalesService salesCacheService;
+    RedisService redisService;
     RedissonClient redissonClient;
     TransactionTemplate transactionTemplate;
 
-    ProductVariationService variationCacheService;
-    SalesService salesCacheService;
+    ObjectMapper objectMapper;
 
     static String VARIATION_CACHE_PREFIX = "variation:";
     static String LOCK_KEY_PREFIX = "lock:variation:";
@@ -165,21 +168,27 @@ public class OrderService {
                 .map(item -> VARIATION_CACHE_PREFIX + item.getVariationId())
                 .toList();
 
-        List<Object> cachedValue = redisTemplate.opsForValue().multiGet(keys);
+        List<String> cachedValue = redisService.multiGet(keys);
+
+        if (cachedValue == null) return;
 
         for(int i = 0; i < request.getItems().size(); i++){
             OrderRequest.Item requestItem = request.getItems().get(i);
-            Object cachedVariation = cachedValue.get(i);
+            String cachedVariation = cachedValue.get(i);
 
-            if(cachedVariation == null || cachedVariation.equals(NULL_VALUE)){
+            if (cachedVariation == null || NULL_VALUE.equals(cachedVariation)) {
                 continue;
             }
 
-            ProductVariationResponse response = (ProductVariationResponse) cachedVariation;
-
-            if(response.getStockQuantity() < requestItem.getQuantity()){
-                log.warn("Fail-fast: Variation {} out of stock in cache", response.getId());
-                throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+            try{
+                ProductVariationResponse response = objectMapper.readValue(cachedVariation, ProductVariationResponse.class);
+                if(response.getStockQuantity() < requestItem.getQuantity()){
+                    log.warn("Fail-fast: Variation {} out of stock in cache (Require: {}, Have: {})",
+                            response.getId(), requestItem.getQuantity(), response.getStockQuantity());
+                    throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+                }
+            } catch (JsonProcessingException e){
+                log.error("Json parse error");
             }
         }
 

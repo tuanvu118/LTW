@@ -3,6 +3,7 @@ package com.BTL_JAVA.BTL.Service.Product;
 import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Request.Product.ProductVariationCreationRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Product.ProductVariationUpdateRequest;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductDetailResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.Entity.Product.Product;
 import com.BTL_JAVA.BTL.Entity.Product.ProductVariation;
@@ -11,6 +12,7 @@ import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.ProductRepository;
 import com.BTL_JAVA.BTL.Repository.ProductVariationRepository;
 import com.BTL_JAVA.BTL.Service.Cloudinary.UploadImageFile;
+import com.BTL_JAVA.BTL.Service.RedisService;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +38,7 @@ public class ProductVariationService {
     ProductRepository productRepository;
     UploadImageFile uploadImageFile;
 
-    RedisTemplate<String, Object> redisTemplate;
+    RedisService redisService;
     RedissonClient redissonClient;
 
     static String CACHE_KEY_PREFIX = "variation:";
@@ -130,15 +132,16 @@ public class ProductVariationService {
 
         String cacheKey = CACHE_KEY_PREFIX + id;
 
-        // Lấy dữ liệu từ cache
-        Object cachedValue = redisTemplate.opsForValue().get(cacheKey);
-
         // Validate variation không tồn tại
-        if(cachedValue != null){
-            if(cachedValue.equals(NULL_VALUE)){
-                throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
-            }
-            return ApiResponse.ok((ProductVariationResponse) cachedValue);
+        String rawValue = redisService.getString(cacheKey);
+        if(NULL_VALUE.equals(rawValue)){
+            throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
+        }
+
+        // Lấy dữ liệu từ cache
+        ProductVariationResponse cacheValue = redisService.get(cacheKey, ProductVariationResponse.class);
+        if(cacheValue != null){
+            return ApiResponse.ok(cacheValue);
         }
 
         // Cache miss
@@ -149,24 +152,26 @@ public class ProductVariationService {
             if(lock.tryLock(5, TimeUnit.SECONDS)){
                 try{
                     // Double check
-                    cachedValue = redisTemplate.opsForValue().get(cacheKey);
-                    if(cachedValue != null){
-                        if(cachedValue.equals(NULL_VALUE)){
-                            throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
-                        }
-                        return ApiResponse.ok((ProductVariationResponse) cachedValue);
+                    rawValue = redisService.getString(cacheKey);
+                    if(NULL_VALUE.equals(rawValue)){
+                        throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
+                    }
+
+                    cacheValue = redisService.get(cacheKey, ProductVariationResponse.class);
+                    if(cacheValue != null){
+                        return ApiResponse.ok(cacheValue);
                     }
 
                     log.info("Cache miss for ID {}, reading from DB...", id);
                     ProductVariation pv = productVariationRepository.findById(id)
                             .orElse(null);
                     if(pv == null){
-                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
+                        redisService.set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
                         throw new AppException(ErrorCode.VARIATION_NOT_FOUND);
                     }
 
                     ProductVariationResponse response = toResponse(pv);
-                    redisTemplate.opsForValue().set(cacheKey, response, Duration.ofMinutes(30));
+                    redisService.set(cacheKey, response, Duration.ofMinutes(30));
 
                     return ApiResponse.ok(response);
                 } finally {
@@ -186,7 +191,7 @@ public class ProductVariationService {
 
     public void clearCache(Integer id){
         String cacheKey = CACHE_KEY_PREFIX + id;
-        redisTemplate.delete(cacheKey);
+        redisService.delete(cacheKey);
         log.info("Cleared cache for Variation ID: {}", id);
     }
 

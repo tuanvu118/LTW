@@ -4,6 +4,7 @@ import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.SalesCreationRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.SalesUpdateRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.ProductSaleItemRequest;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Sales.SalesResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Product.ProductSaleItemResponse;
 import com.BTL_JAVA.BTL.Entity.Product.Sales;
@@ -14,6 +15,7 @@ import com.BTL_JAVA.BTL.Repository.ProductRepository;
 import com.BTL_JAVA.BTL.Repository.ProductSaleRepository;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
+import com.BTL_JAVA.BTL.Service.RedisService;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +46,7 @@ public class SalesService {
     ProductRepository productRepository;
     ProductSaleRepository productSaleRepository;
 
-    RedisTemplate<String, Object> redisTemplate;
+    RedisService redisService;
     RedissonClient redissonClient;
 
     static String DISCOUNT_CACHE_PREFIX = "product:discount:";
@@ -85,21 +87,21 @@ public class SalesService {
         List<String> keys = productIds.stream()
                 .map(id -> DISCOUNT_CACHE_PREFIX + id)
                 .toList();
-        List<Object> cacheValues = redisTemplate.opsForValue().multiGet(keys);
+        List<String> cacheValues = redisService.multiGet(keys);
 
         List<Integer> missIds = new ArrayList<>();
 
-        // Validate variation không tồn tại
+        // Validate product không tồn tại
         for(int i = 0; i < productIds.size(); i++){
             Integer productId = productIds.get(i);
-            Object cacheValue = cacheValues != null ? cacheValues.get(i) : null;
+            String cacheValue = cacheValues != null ? cacheValues.get(i) : null;
 
             if(cacheValue != null){
-                if(cacheValue.equals(NULL_VALUE)){
+                if(NULL_VALUE.equals(cacheValue)){
                     log.warn("Product ID {} marked as NOT EXIST in cache", productId);
                     continue;
                 }
-                resultMap.put(productId, new BigDecimal(cacheValue.toString()));
+                resultMap.put(productId, new BigDecimal(cacheValue.replace("\"", "")));
             }
             else{
                 missIds.add(productId);
@@ -324,12 +326,15 @@ public class SalesService {
         String lockKey = DISCOUNT_LOCK_PREFIX + productId;
 
         // Validate product không tồn tại
-        Object cacheValue = redisTemplate.opsForValue().get(cacheKey);
-        if (cacheValue != null) {
-            if (cacheValue.equals(NULL_VALUE)){
-                throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
-            }
-            return new BigDecimal(cacheValue.toString());
+        String rawValue = redisService.getString(cacheKey);
+        if(NULL_VALUE.equals(rawValue)){
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        // Lấy dữ liệu từ cache
+        BigDecimal cacheValue = redisService.get(cacheKey, BigDecimal.class);
+        if(cacheValue != null){
+            return cacheValue;
         }
 
         RLock lock = redissonClient.getLock(lockKey);
@@ -337,19 +342,21 @@ public class SalesService {
             if(lock.tryLock(5, TimeUnit.SECONDS)){
                 try{
                     // Double check
-                    cacheValue = redisTemplate.opsForValue().get(cacheKey);
+                    rawValue = redisService.getString(cacheKey);
+                    if(NULL_VALUE.equals(rawValue)){
+                        throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                    }
+
+                    cacheValue = redisService.get(cacheKey, BigDecimal.class);
                     if(cacheValue != null){
-                        if(cacheValue.equals(NULL_VALUE)){
-                            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
-                        }
-                        return new BigDecimal(cacheValue.toString());
+                        return cacheValue;
                     }
 
                     log.info("Cache miss for Discount ID {}, reading from DB...", productId);
 
                     // Kiểm tra xem PRODUCT có sale không
                     if(!productRepository.existsById(productId)){
-                        redisTemplate.opsForValue().set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
+                        redisService.set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
                         throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
                     }
 
@@ -362,7 +369,7 @@ public class SalesService {
                             .max(BigDecimal::compareTo)
                             .orElse(BigDecimal.ZERO);
 
-                    redisTemplate.opsForValue().set(cacheKey, maxDiscount, Duration.ofMinutes(30));
+                    redisService.set(cacheKey, maxDiscount, Duration.ofMinutes(30));
 
                     return maxDiscount;
                 } finally {
@@ -384,9 +391,10 @@ public class SalesService {
 
         if(productIds == null || productIds.isEmpty()) return;
         List<String> keys = productIds.stream()
+                .distinct()
                 .map(id -> DISCOUNT_CACHE_PREFIX + id)
                 .toList();
-        redisTemplate.delete(keys);
+        keys.forEach(redisService::delete);
 
     }
 

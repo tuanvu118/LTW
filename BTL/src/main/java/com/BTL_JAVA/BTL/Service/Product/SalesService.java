@@ -4,6 +4,7 @@ import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.SalesCreationRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.SalesUpdateRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Sales.ProductSaleItemRequest;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Sales.SalesResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Product.ProductSaleItemResponse;
@@ -16,6 +17,7 @@ import com.BTL_JAVA.BTL.Repository.ProductSaleRepository;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Service.RedisService;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -50,32 +52,65 @@ public class SalesService {
     RedissonClient redissonClient;
 
     static String DISCOUNT_CACHE_PREFIX = "product:discount:";
+    static String SALE_LIST_CACHE = "sale:list:all";
     static String DISCOUNT_LOCK_PREFIX = "lock:discount:";
+    static String LIST_LOCK = "lock:sale:list";
     static String NULL_VALUE = "NOT_EXIST";
 
     public ApiResponse<List<SalesResponse>> getAllSales(Boolean active) {
-        try {
-            List<Sales> allSales = salesRepository.findAll();
 
-            List<SalesResponse> salesResponses = allSales.stream()
-                    .map(sale -> {
-                        boolean isActive = calculateActiveStatus(sale.getStDate(), sale.getEndDate());
-                        return toResponse(sale, isActive);
-                    })
-                    .collect(Collectors.toList());
+        // Lấy dữ liệu từ cache
+        List<SalesResponse> cacheList = redisService.getList(SALE_LIST_CACHE, new TypeReference<>(){});
 
-            if (active != null) {
-                salesResponses = salesResponses.stream()
-                        .filter(sale -> sale.getActive().equals(active))
-                        .collect(Collectors.toList());
+        // Cache miss
+        if(cacheList == null){
+            RLock lock = redissonClient.getLock(LIST_LOCK);
+            try{
+                if(lock.tryLock(5, TimeUnit.SECONDS)){
+                    try{
+                        // Double check
+                        cacheList = redisService.getList(SALE_LIST_CACHE, new TypeReference<>(){});
+
+                        if(cacheList == null){
+                            log.info("Cache miss for sales list, reading from DB...");
+                            List<Sales> allSales = salesRepository.findAll();
+
+                            cacheList = allSales.stream()
+                                    .map(sale -> {
+                                        boolean isActive = calculateActiveStatus(sale.getStDate(), sale.getEndDate());
+                                        return toResponse(sale, isActive);
+                                    })
+                                    .toList();
+
+                            redisService.set(SALE_LIST_CACHE, cacheList, Duration.ofMinutes(30));
+                        }
+                    } finally {
+                        if(lock.isHeldByCurrentThread()){
+                            lock.unlock();
+                        }
+                    }
+                } else {
+                    throw new AppException(ErrorCode.SYSTEM_BUSY);
+                }
+            } catch (InterruptedException e){
+                Thread.currentThread().interrupt();
+                throw new AppException(ErrorCode.SYSTEM_ERROR);
             }
-
-            return ApiResponse.<List<SalesResponse>>builder()
-                    .result(salesResponses)
-                    .build();
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.SALES_NOT_FOUND);
         }
+
+        // Tính toán lại trạng thái và filter trên ram
+        List<SalesResponse> result = cacheList.stream()
+                .map(sale -> {
+                    sale.setActive(calculateActiveStatus(sale.getStDate(), sale.getEndDate()));
+                    return sale;
+                })
+                .filter(sale -> active == null || sale.getActive().equals(active))
+                .toList();
+
+        return ApiResponse.<List<SalesResponse>>builder()
+                .result(result)
+                .build();
+
     }
 
     public Map<Integer, BigDecimal> getLastestDiscountMap(List<Integer> productIds){

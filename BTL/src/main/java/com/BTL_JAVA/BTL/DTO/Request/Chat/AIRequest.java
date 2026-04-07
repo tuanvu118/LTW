@@ -9,9 +9,7 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class ChatMessageRequest {
-    Integer senderId;
-    Integer receiverId;
+public class AIRequest {
     Integer conversationId;
-    String content;
+    String input;
 }

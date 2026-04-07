@@ -14,6 +14,7 @@ import com.BTL_JAVA.BTL.Entity.User;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.*;
+import com.BTL_JAVA.BTL.Service.Product.ProductService;
 import com.BTL_JAVA.BTL.Service.Product.ProductVariationService;
 import com.BTL_JAVA.BTL.Service.Product.SalesService;
 import com.BTL_JAVA.BTL.enums.OrderStatus;
@@ -54,8 +55,8 @@ public class OrderService {
     UserRepository userRepository;
     AddressRepository addressRepository;
     ProductVariationRepository productVariationRepository;
-    ProductSaleRepository productSaleRepository;
 
+    ProductService productCacheService;
     ProductVariationService variationCacheService;
     SalesService salesCacheService;
     RedisService redisService;
@@ -142,6 +143,7 @@ public class OrderService {
             });
 
             sortedVariationIds.forEach(variationCacheService::clearCache);
+            productCacheService.clearListCache();
 
             return mapToOrderResponse(savedOrder);
 

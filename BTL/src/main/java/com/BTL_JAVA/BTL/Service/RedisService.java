@@ -32,7 +32,12 @@ public class RedisService {
     public void set(String key, Object value, Duration timeout){
 
         try{
-            String jsonToCache = objectMapper.writeValueAsString(value);
+            String jsonToCache;
+            if(value instanceof String string){
+                jsonToCache = string;
+            } else{
+                jsonToCache = objectMapper.writeValueAsString(value);
+            }
             redisTemplate.opsForValue().set(key, jsonToCache, timeout);
         } catch (JsonProcessingException e){
             throw new AppException(ErrorCode.CACHE_WRITE_ERROR);

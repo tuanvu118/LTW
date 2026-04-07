@@ -31,10 +31,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -145,15 +142,35 @@ public class SalesService {
 
         // Cache miss
         if(!missIds.isEmpty()){
-            for(Integer pId : missIds){
-                try{
-                    BigDecimal discount = getDiscountWithLock(pId);
+            log.info("Cache miss for {} products, performing Batch DB Fetch...", missIds.size());
+
+            List<Product> existingProducts = productRepository.findAllById(missIds);
+            Set<Integer> existingIds = existingProducts.stream()
+                    .map(Product::getProductId)
+                    .collect(Collectors.toSet());
+
+            missIds.stream()
+                    .filter(id -> !existingIds.contains(id))
+                    .forEach(id -> redisService.set(DISCOUNT_CACHE_PREFIX + id, NULL_VALUE, Duration.ofMinutes(1)));
+
+            if(!existingIds.isEmpty()){
+                LocalDateTime now = LocalDateTime.now();
+                List<ProductSale> activeProductSales = productSaleRepository
+                        .findActiveSalesByProductIds(new ArrayList<>(existingIds), now);
+
+                Map<Integer, BigDecimal> dbDiscountMap = activeProductSales.stream()
+                        .collect(Collectors.toMap(
+                                ps -> ps.getProduct().getProductId(),
+                                ProductSale::getSaleValue,
+                                (v1, v2) -> v1.compareTo(v2) > 0 ? v1 : v2
+                        ));
+
+                for(Integer pId : existingIds){
+                    BigDecimal discount = dbDiscountMap.getOrDefault(pId, BigDecimal.ZERO);
                     resultMap.put(pId, discount);
-                } catch (AppException e){
-                    if(e.getErrorCode() == ErrorCode.PRODUCT_NOT_FOUND){
-                        continue; //Bỏ qua sản phẩm ảo
-                    }
-                    throw e;
+
+                    String cacheKey = DISCOUNT_CACHE_PREFIX + pId;
+                    redisService.set(cacheKey, discount, Duration.ofMinutes(30));
                 }
             }
         }

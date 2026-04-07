@@ -22,9 +22,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // endpoint để FE connect websocket
+        // Phải khớp Origin trình duyệt (CORS filter REST không áp hết cho handshake SockJS).
         registry.addEndpoint("/ws")
-//                .setAllowedOriginPatterns("*")
-                .setAllowedOrigins("http://localhost:5173")
+                .setAllowedOrigins(
+                        "http://localhost:5173",
+                        "http://localhost:5174",
+                        "https://ltw.culus.io.vn")
                 .withSockJS(); // cho phép SockJS fallback
     }
 }

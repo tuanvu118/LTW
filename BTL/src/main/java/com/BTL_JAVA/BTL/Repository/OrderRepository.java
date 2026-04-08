@@ -49,6 +49,19 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
            "WHERE o.status = :status")
     List<Order> findByStatusWithDetails(@Param("status") OrderStatus status);
 
-
+    @Query("""
+        SELECT DISTINCT pv.product.productId
+        FROM OrderDetail od
+        JOIN od.order o
+        JOIN od.productVariation pv
+        WHERE o.user.id = :userId
+        AND o.status = 'COMPLETED'
+        AND pv.product.productId NOT IN (
+            SELECT f.product.productId
+            FROM Feedback f
+            WHERE f.user.id = :userId
+        )
+""")
+    List<Integer> getProductIdsWaitingForReview(@Param("userId") Integer userId);
 
 }

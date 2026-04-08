@@ -61,7 +61,7 @@ public class OrderController {
         );
     }
 
-    @GetMapping("/{orderId}")
+    @GetMapping("/{orderId:[0-9]+}")
     @PreAuthorize("isAuthenticated()")
     ApiResponse<OrderResponse> getOrderById(@PathVariable("orderId") Integer orderId) {
         return ApiResponse.<OrderResponse>ok(
@@ -79,6 +79,17 @@ public class OrderController {
                 orderService.updateOrderStatus(orderId, status), 
                 "Cập nhật trạng thái đơn hàng thành công!"
         );
+    }
+
+    @GetMapping("/pending-feedbacks")
+//    @PreAuthorize("isAuthenticated()")
+    ApiResponse<List<Integer>> getPendingFeedbacks(){
+
+        return ApiResponse.ok(
+                orderService.getPendingFeedbackProductIds(),
+                "Lấy danh sách sản phẩm chờ đánh giá thành công!"
+        );
+
     }
 
     @DeleteMapping("/{orderId}")

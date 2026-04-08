@@ -211,10 +211,6 @@ public class ProductService {
                     .build();
         }
 
-        return ApiResponse.<ProductDetailResponse>builder()
-                .code(1000).message("Success")
-                .result(toDetailResponse(p))
-                .build();
         // Cache miss
         String lockKey = PRODUCT_LOCK + id;
         RLock lock = redissonClient.getLock(lockKey);
@@ -298,10 +294,6 @@ public class ProductService {
                     var data = all.stream()
                             .map(this::toResponse)
                             .toList();
-
-        var data = all.stream()
-                .map(this::toResponse)
-                .toList();
                     redisService.set(PRODUCT_LIST_CACHE, data, Duration.ofMinutes(30));
 
                     return ApiResponse.<List<ProductResponse>>builder()

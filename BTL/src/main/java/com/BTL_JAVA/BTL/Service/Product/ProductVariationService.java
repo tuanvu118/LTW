@@ -190,9 +190,11 @@ public class ProductVariationService {
     }
 
     public void clearCache(Integer id){
+
         String cacheKey = CACHE_KEY_PREFIX + id;
         redisService.delete(cacheKey);
         log.info("Cleared cache for Variation ID: {}", id);
+
     }
 
 

@@ -195,7 +195,7 @@ public class ReviewService {
         // Validate category không tồn tại
         String rawValue = redisService.getString(cacheKey);
         if(NULL_VALUE.equals(rawValue)){
-            log.info("Cache hit but no value: {}", rating);
+//            log.info("Cache hit but no value: {}", rating);
             return List.of();
         }
 

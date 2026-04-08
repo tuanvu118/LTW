@@ -154,7 +154,7 @@ public class CategoryService {
                     Map<Integer, BigDecimal> discountMap = salesCacheService.getLastestDiscountMap(productIds);
 
                     CategoryResponse response = toResponse(category, discountMap);
-                    redisService.set(cacheKey, response, Duration.ofMinutes(30));
+                    redisService.set(cacheKey, response, Duration.ofHours(24));
 
                     return ApiResponse.ok(response);
                 } finally {
@@ -210,7 +210,7 @@ public class CategoryService {
                             .map(c -> toResponse(c, discountMap))
                             .toList();
 
-                    redisService.set(CATEGORY_LIST_CACHE, data, Duration.ofMinutes(30));
+                    redisService.set(CATEGORY_LIST_CACHE, data, Duration.ofHours(24));
 
                     return ApiResponse.ok(data);
                 } finally {

@@ -4,6 +4,7 @@ package com.BTL_JAVA.BTL.DTO.Response.Product;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -15,7 +16,7 @@ import java.util.Set;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class ProductResponse {
+public class ProductResponse implements Serializable {
         Integer productId;
         String  title;
         String  description;

@@ -16,15 +16,20 @@ import com.BTL_JAVA.BTL.Repository.ProductSaleRepository;
 import com.BTL_JAVA.BTL.Repository.ProductVariationRepository;
 import com.BTL_JAVA.BTL.Repository.Spec.ProductSpecs;
 import com.BTL_JAVA.BTL.Service.Cloudinary.UploadImageFile;
+import com.BTL_JAVA.BTL.Service.RedisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import static org.springframework.data.jpa.domain.Specification.allOf;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -32,7 +37,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -48,8 +55,18 @@ public class ProductService {
     UploadImageFile uploadImageFile;
     ProductSaleRepository  productSaleRepository;
 
+    RedissonClient redissonClient;
+    RedisService redisService;
+
+    static String PRODUCT_DETAIL_CACHE = "product:detail:";
+    static String PRODUCT_LIST_CACHE = "product:list:all";
+    static String PRODUCT_LOCK = "lock:product:";
+    static String LIST_LOCK = "lock:product:list";
+    static String NULL_VALUE = "NOT_EXIST";
+
     @Transactional
     public ApiResponse<ProductResponse> create(ProductCreationRequest req) throws IOException {
+
         Product p = Product.builder()
                 .title(req.getTitle())
                 .description(req.getDescription())
@@ -81,15 +98,20 @@ public class ProductService {
             productVariationRepository.saveAll(variations);
         }
 
+        clearProductCache(saved.getProductId());
+        clearListCache();
+
         return ApiResponse.<ProductResponse>builder()
                 .code(1000).message("Success")
                 .result(toResponse(saved))
                 .build();
+
     }
 
 
     @Transactional
     public ApiResponse<ProductResponse> update(Integer id, ProductUpdateRequest req) throws IOException {
+
         Product p = productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
@@ -134,14 +156,19 @@ public class ProductService {
         Set<Integer> currentVarIds = (saved.getProductVariations() == null) ? Set.of()
                 : saved.getProductVariations().stream().map(ProductVariation::getId).collect(Collectors.toSet());
 
+        clearProductCache(id);
+        clearListCache();
+
         return ApiResponse.<ProductResponse>builder()
                 .code(1000).message("Success")
                 .result(toResponse(saved))
                 .build();
+
     }
 
     @Transactional
     public ApiResponse<Void> delete(Integer id) {
+
         Product p = productRepository.findById(id)
                 .orElseThrow(() -> new AppException((ErrorCode.PRODUCT_NOT_FOUND)));
 
@@ -154,39 +181,152 @@ public class ProductService {
             productSaleRepository.deleteAll(productSales);
         }
 
+        clearProductCache(id);
+        clearListCache();
+
         productRepository.delete(p);
         return ApiResponse.<Void>builder()
                 .code(1000).message("Deleted").result(null).build();
+
     }
 
 
     public ApiResponse<ProductDetailResponse> get(Integer id) {
-        Product p = productRepository.findById(id)
-                .orElseThrow(() -> new AppException((ErrorCode.PRODUCT_NOT_FOUND)));
 
-        Set<Integer> varIds = (p.getProductVariations() == null) ? Set.of()
-                : p.getProductVariations().stream().map(ProductVariation::getId).collect(Collectors.toSet());
+        String cacheKey = PRODUCT_DETAIL_CACHE + id;
 
-        return ApiResponse.<ProductDetailResponse>builder()
-                .code(1000).message("Success")
-                .result(toDetailResponse(p))
-                .build();
+        // Validate product không tồn tại
+        String rawValue = redisService.getString(cacheKey);
+        if(NULL_VALUE.equals(rawValue)){
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        // Lấy dữ liệu từ cache
+        ProductDetailResponse cacheValue = redisService.get(cacheKey, ProductDetailResponse.class);
+        if(cacheValue != null){
+            return ApiResponse.<ProductDetailResponse>builder()
+                    .code(1000).message("Success")
+                    .result(cacheValue)
+                    .build();
+        }
+
+        // Cache miss
+        String lockKey = PRODUCT_LOCK + id;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    rawValue = redisService.getString(cacheKey);
+                    if(NULL_VALUE.equals(rawValue)){
+                        throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                    }
+
+                    cacheValue = redisService.get(cacheKey, ProductDetailResponse.class);
+                    if(cacheValue != null){
+                        return ApiResponse.<ProductDetailResponse>builder()
+                                .code(1000).message("Success")
+                                .result(cacheValue)
+                                .build();
+                    }
+
+                    log.info("Cache miss for Product ID {}, fetching from DB...", id);
+                    Product product = productRepository.findById(id).orElse(null);
+                    if(product == null){
+                        redisService.set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
+                        throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+                    }
+
+                    ProductDetailResponse response = toDetailResponse(product);
+                    redisService.set(cacheKey, response, Duration.ofMinutes(30));
+
+                    return ApiResponse.<ProductDetailResponse>builder()
+                            .code(1000).message("Success")
+                            .result(response)
+                            .build();
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else {
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
     }
 
 
     public ApiResponse<List<ProductResponse>> list() {
-        var all = productRepository.findAll();
 
-        var data = all.stream().map(p -> {
-            Set<Integer> varIds = (p.getProductVariations() == null) ? Set.of()
-                    : p.getProductVariations().stream().map(ProductVariation::getId).collect(Collectors.toSet());
-            return toResponse(p);
-        }).toList();
+        // Lấy dữ liệu từ cache
+        List<ProductResponse> cacheList = redisService.getList(PRODUCT_LIST_CACHE, new TypeReference<>(){});
 
-        return ApiResponse.<List<ProductResponse>>builder()
-                .code(1000).message("Success")
-                .result(data)
-                .build();
+        if(cacheList != null){
+            return ApiResponse.<List<ProductResponse>>builder()
+                    .code(1000).message("Success")
+                    .result(cacheList)
+                    .build();
+        }
+
+        // Cache miss
+        RLock lock = redissonClient.getLock(LIST_LOCK);
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    cacheList = redisService.getList(PRODUCT_LIST_CACHE, new TypeReference<>(){});
+                    if(cacheList != null){
+                        return ApiResponse.<List<ProductResponse>>builder()
+                                .code(1000).message("Success")
+                                .result(cacheList)
+                                .build();
+                    }
+
+                    log.info("Cache miss for product list, reading from DB...");
+
+                    var all = productRepository.findAll();
+                    var data = all.stream()
+                            .map(this::toResponse)
+                            .toList();
+
+                    redisService.set(PRODUCT_LIST_CACHE, data, Duration.ofMinutes(30));
+
+                    return ApiResponse.<List<ProductResponse>>builder()
+                            .code(1000).message("Success")
+                            .result(data)
+                            .build();
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else {
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
+    }
+
+    public void clearProductCache(Integer id){
+
+        redisService.delete(PRODUCT_DETAIL_CACHE + id);
+        log.info("Cleared detail cache for product {}", id);
+
+    }
+
+    public void clearListCache(){
+
+        redisService.delete(PRODUCT_LIST_CACHE);
+        log.info("Cleared product list cache");
+
     }
 
     private ProductResponse toResponse(Product p) {

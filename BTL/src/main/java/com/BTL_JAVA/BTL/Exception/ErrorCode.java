@@ -75,6 +75,7 @@ public enum ErrorCode {
     SYSTEM_BUSY(9001, "Hệ thống đang bận, vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS),
     SYSTEM_ERROR(9002, "Lỗi gián đoạn luồng hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR),
     UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR),
+    CACHE_WRITE_ERROR(9003, "Xảy ra lỗi khi ghi cache", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

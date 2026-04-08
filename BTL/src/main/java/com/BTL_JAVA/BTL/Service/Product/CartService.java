@@ -4,6 +4,7 @@ import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Request.Product.CartItemRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Product.UpdateQuantityRequest;
 import com.BTL_JAVA.BTL.DTO.Response.Product.CartItemResponse;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.Entity.Product.Cart;
 import com.BTL_JAVA.BTL.Entity.Product.ProductVariation;
 import com.BTL_JAVA.BTL.Entity.User;
@@ -12,14 +13,21 @@ import com.BTL_JAVA.BTL.Repository.ProductVariationRepository;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.UserRepository;
+import com.BTL_JAVA.BTL.Service.RedisService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,151 +40,207 @@ public class CartService {
     ProductVariationRepository productVariationRepository;
     UserRepository userRepository;
 
+    ProductVariationService productVariationCacheService;
+    RedisService redisService;
+    RedissonClient redissonClient;
+
+    static String CART_CACHE_PREFIX = "cart:user:";
+    static String CART_LOCK__PREFIX = "lock:cart:user:";
+
     public ApiResponse<List<CartItemResponse>> getCart() {
-        try {
-            User user = getCurrentUser();
-            List<Cart> cartItems = cartRepository.findAll().stream()
-                    .filter(cart -> cart.getUser().getId() == user.getId())
-                    .collect(Collectors.toList());
 
-            List<CartItemResponse> items = toCartItemResponseList(cartItems);
+        Integer userId = getCurrentUserId();
+        String cacheKey = CART_CACHE_PREFIX + userId;
 
+        // Lấy dữ liệu từ cache
+        List<CartItemResponse> cacheCart = redisService.getList(cacheKey, new TypeReference<>(){});
+        if(cacheCart != null){
             return ApiResponse.<List<CartItemResponse>>builder()
-                    .result(items)
+                    .result(cacheCart)
                     .build();
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.CART_NOT_FOUND);
         }
-    }
 
-    public ApiResponse<List<CartItemResponse>> addToCart(CartItemRequest request) {
-        try {
-            User user = getCurrentUser();
-            if (request.getQuantity() <= 0) {
-                throw new AppException(ErrorCode.INVALID_QUANTITY);
-            }
+        // Cache miss
+        String lockKey = CART_LOCK__PREFIX + userId;
+        RLock lock = redissonClient.getLock(lockKey);
 
-            // Tìm product variation
-            ProductVariation variation = productVariationRepository.findById(request.getProduct_variation_id())
-                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIATION_NOT_FOUND));
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    cacheCart = redisService.getList(cacheKey, new TypeReference<>(){});
+                    if(cacheCart != null){
+                        return ApiResponse.<List<CartItemResponse>>builder()
+                                .result(cacheCart)
+                                .build();
+                    }
 
-            // Tìm cart item hiện tại
-            Cart existingCart = findCartItemByUserAndVariation(user, variation);
+                    log.info("Cache miss for Cart User ID {}, reading from DB...", userId);
 
-            int totalQuantity = request.getQuantity();
-            if (existingCart != null) {
-                totalQuantity += existingCart.getQuantity();
-            }
+                    List<Cart> cartItems = cartRepository.findByUserId(userId);
+                    List<CartItemResponse> items = toCartItemResponseList(cartItems);
 
-            // Kiểm tra stock
-            if (totalQuantity > variation.getStockQuantity()) {
-                throw new AppException(ErrorCode.NOT_ENOUGH_STOCK);
-            }
-
-            // Lưu cart
-            if (existingCart != null) {
-                existingCart.setQuantity(totalQuantity);
-                cartRepository.save(existingCart);
-            } else {
-                Cart newCart = Cart.builder()
-                        .user(user)
-                        .productVariation(variation)
-                        .quantity(totalQuantity)
-                        .build();
-                cartRepository.save(newCart);
-            }
-
-            return getCart();
-
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.CART_UPDATE_FAILED);
-        }
-    }
-
-
-    public ApiResponse<List<CartItemResponse>> updateCartItem(Integer productVariationId, UpdateQuantityRequest request) {
-        try {
-            User user = getCurrentUser();
-            int quantity = request.getQuantity();
-
-            if (quantity < 0) {
-                throw new AppException(ErrorCode.INVALID_QUANTITY);
-            }
-
-            ProductVariation variation = productVariationRepository.findById(productVariationId)
-                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIATION_NOT_FOUND));
-
-            if (quantity > 0 && quantity > variation.getStockQuantity()) {
-                throw new AppException(ErrorCode.NOT_ENOUGH_STOCK);
-            }
-
-            Cart existingCart = findCartItemByUserAndVariation(user, variation);
-
-            if (existingCart != null) {
-                if (quantity == 0) {
-                    cartRepository.delete(existingCart);
-                } else {
-                    existingCart.setQuantity(quantity);
-                    cartRepository.save(existingCart);
+                    redisService.set(cacheKey, items, Duration.ofMinutes(15));
+                    return ApiResponse.<List<CartItemResponse>>builder()
+                            .result(items)
+                            .build();
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
                 }
-            } else if (quantity > 0) {
-                Cart newCart = Cart.builder()
-                        .user(user)
-                        .productVariation(variation)
-                        .quantity(quantity)
-                        .build();
-                cartRepository.save(newCart);
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
             }
-
-            return getCart();
-
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.CART_UPDATE_FAILED);
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
         }
+
     }
 
+    @Transactional
+    public ApiResponse<List<CartItemResponse>> addToCart(CartItemRequest request) {
 
+        Integer userId = getCurrentUserId();
+
+        String lockKey = CART_LOCK__PREFIX + userId;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+
+                    ProductVariationResponse variationDto = productVariationCacheService.get(request.getProduct_variation_id()).getResult();
+
+                    Cart existingCart = cartRepository.findByUserIdAndProductVariationId(userId, variationDto.getId()).orElse(null);
+                    int totalQuantity = request.getQuantity() + (existingCart != null ? existingCart.getQuantity() : 0);
+
+                    // Kiểm tra tồn kho nhanh bằng dữ liệu DTO từ Cache
+                    if (totalQuantity > variationDto.getStockQuantity()) {
+                        throw new AppException(ErrorCode.NOT_ENOUGH_STOCK);
+                    }
+
+                    if (existingCart != null) {
+                        existingCart.setQuantity(totalQuantity);
+                        cartRepository.save(existingCart);
+                    } else {
+                        // TỐI ƯU: Dùng getReferenceById để lấy Entity Proxy, không tốn lệnh SELECT
+                        ProductVariation variationEntity = productVariationRepository.getReferenceById(variationDto.getId());
+                        User userEntity = userRepository.getReferenceById(userId);
+
+                        cartRepository.save(Cart.builder()
+                                .user(userEntity)
+                                .productVariation(variationEntity)
+                                .quantity(totalQuantity)
+                                .build());
+                    }
+
+                    clearCache(userId);
+                    return getCart();
+
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
+    }
+
+    @Transactional
+    public ApiResponse<List<CartItemResponse>> updateCartItem(Integer productVariationId, UpdateQuantityRequest request) {
+
+        Integer userId = getCurrentUserId();
+
+        String lockKey = CART_LOCK__PREFIX + userId;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    Cart existingCart = cartRepository.findByUserIdAndProductVariationId(userId, productVariationId)
+                            .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
+
+                    if (request.getQuantity() == 0) {
+                        cartRepository.delete(existingCart);
+                    } else {
+                        // Tận dụng Variation Cache để check stock
+                        ProductVariationResponse variationDto = productVariationCacheService.get(productVariationId).getResult();
+                        if (request.getQuantity() > variationDto.getStockQuantity()) {
+                            throw new AppException(ErrorCode.NOT_ENOUGH_STOCK);
+                        }
+                        existingCart.setQuantity(request.getQuantity());
+                        cartRepository.save(existingCart);
+                    }
+
+                    clearCache(userId);
+                    return getCart();
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
+    }
+
+    @Transactional
     public ApiResponse<List<CartItemResponse>> removeFromCart(Integer productVariationId) {
-        try {
-            User user = getCurrentUser();
 
-            ProductVariation variation = productVariationRepository.findById(productVariationId)
-                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIATION_NOT_FOUND));
+        Integer userId = getCurrentUserId();
 
-            Cart existingCart = findCartItemByUserAndVariation(user, variation);
+        String lockKey = CART_LOCK__PREFIX + userId;
+        RLock lock = redissonClient.getLock(lockKey);
 
-            if (existingCart != null) {
-                cartRepository.delete(existingCart);
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    cartRepository.findByUserIdAndProductVariationId(userId, productVariationId)
+                            .ifPresent(cartRepository::delete);
+
+                    clearCache(userId);
+                    return getCart();
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
             }
-
-            return getCart();
-
-        } catch (AppException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new AppException(ErrorCode.CART_UPDATE_FAILED);
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
         }
+
     }
 
-    private User getCurrentUser() {
+    public void clearCache(Integer id){
+
+        String cacheKey = CART_CACHE_PREFIX + id;
+        redisService.delete(cacheKey);
+        log.info("Cleared cache for Cart User ID: {}", id);
+
+    }
+
+    private Integer getCurrentUserId() {
+
         var context = SecurityContextHolder.getContext();
-        String userId = context.getAuthentication().getName();
-        User user = userRepository.findById(Integer.parseInt(userId)).orElseThrow(
-                () -> new AppException(ErrorCode.USER_NOT_EXISTED)
-        );
-        return user;
-    }
+        return Integer.parseInt(context.getAuthentication().getName());
 
-    private Cart findCartItemByUserAndVariation(User user, ProductVariation variation) {
-        return cartRepository.findAll().stream()
-                .filter(cart -> cart.getUser().getId() == user.getId() &&
-                        cart.getProductVariation().getId() == variation.getId())
-                .findFirst()
-                .orElse(null);
     }
 
     private List<CartItemResponse> toCartItemResponseList(List<Cart> cartItems) {
@@ -187,6 +251,6 @@ public class CartService {
                         .product_variation_id(cart.getProductVariation().getId())
                         .quantity(cart.getQuantity())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
 }

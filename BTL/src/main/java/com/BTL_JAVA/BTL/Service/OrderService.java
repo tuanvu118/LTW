@@ -3,59 +3,83 @@ package com.BTL_JAVA.BTL.Service;
 import com.BTL_JAVA.BTL.DTO.Request.Order.OrderRequest;
 import com.BTL_JAVA.BTL.DTO.Request.Order.OrderUpdateRequest;
 import com.BTL_JAVA.BTL.DTO.Response.OrderResponse;
+import com.BTL_JAVA.BTL.DTO.Response.Product.ProductVariationResponse;
 import com.BTL_JAVA.BTL.Entity.Address;
 import com.BTL_JAVA.BTL.Entity.Orders.Order;
 import com.BTL_JAVA.BTL.Entity.Orders.OrderDetail;
 import com.BTL_JAVA.BTL.Entity.Payment;
-import com.BTL_JAVA.BTL.Entity.Product.ProductSale;
 import com.BTL_JAVA.BTL.Entity.Product.ProductVariation;
 import com.BTL_JAVA.BTL.Entity.User;
 import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
-import com.BTL_JAVA.BTL.Repository.AddressRepository;
-import com.BTL_JAVA.BTL.Repository.OrderRepository;
-import com.BTL_JAVA.BTL.Repository.ProductSaleRepository;
-import com.BTL_JAVA.BTL.Repository.UserRepository;
+import com.BTL_JAVA.BTL.Repository.*;
+import com.BTL_JAVA.BTL.Service.Product.ProductService;
+import com.BTL_JAVA.BTL.Service.Product.ProductVariationService;
+import com.BTL_JAVA.BTL.Service.Product.SalesService;
 import com.BTL_JAVA.BTL.enums.OrderStatus;
 import com.BTL_JAVA.BTL.enums.PaymentStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
-
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class OrderService {
-    final OrderRepository orderRepository;
-    final UserRepository userRepository;
-    final AddressRepository addressRepository;
-    final com.BTL_JAVA.BTL.Repository.ProductVariationRepository productVariationRepository;
-    final ProductSaleRepository productSaleRepository;
+
+    OrderRepository orderRepository;
+    UserRepository userRepository;
+    AddressRepository addressRepository;
+    ProductVariationRepository productVariationRepository;
+
+    ProductService productCacheService;
+    ProductVariationService variationCacheService;
+    SalesService salesCacheService;
+    RedisService redisService;
+    RedissonClient redissonClient;
+    TransactionTemplate transactionTemplate;
+
+    ObjectMapper objectMapper;
+
+    static String VARIATION_CACHE_PREFIX = "variation:";
+    static String VARIATION_LOCK_PREFIX = "lock:variation:";
+    static String ORDER_USER_CACHE = "order:user:";
+    static String ORDER_USER_LOCK = "lock:order:user:";
+    static String PENDING_FEEDBACK_CACHE = "user:pending-feedbacks";
+    static String NULL_VALUE = "NOT_EXIST";
 
     // Các phương thức lấy người và ktra quyền
-    User getCurrentAuthenticatedUser() {
+    private User getCurrentAuthenticatedUser() {
         String userId = SecurityContextHolder.getContext().getAuthentication().getName(); // Lấy user ID từ token
         return userRepository.findById(Integer.parseInt(userId))
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
     }
 
-    void checkAdminPermission(User user) {
+    private void checkAdminPermission(User user) {
         boolean isAdmin = user.getRoles().stream()
                 .anyMatch(role -> role.getNameRoles().equals("ADMIN"));
         if (!isAdmin) {
@@ -63,39 +87,12 @@ public class OrderService {
         }
     }
 
-    private Double calculateFinalPrice(Integer productId, Double originalPrice) {
-        LocalDateTime now = LocalDateTime.now();
-        
-        // Tìm tất cả các ProductSale đang active của product này (đã sort theo saleValue DESC)
-        List<ProductSale> productSales = productSaleRepository.findActiveProductSaleByProductId(productId, now);
-        
-        // Nếu có sale, lấy discount lớn nhất (phần tử đầu tiên do đã sort DESC)
-        if (!productSales.isEmpty()) {
-            BigDecimal maxDiscount = productSales.getFirst().getSaleValue();
-            
-            if (maxDiscount != null && maxDiscount.compareTo(BigDecimal.ZERO) > 0) {
-                // Áp dụng discount: giá cuối = giá gốc * (1 - discount)
-                // Ví dụ: discount = 0.2 (20%) => giá cuối = giá gốc * 0.8
-                BigDecimal discountMultiplier = BigDecimal.ONE.subtract(maxDiscount);
-                double finalPrice = originalPrice * discountMultiplier.doubleValue();
-                
-                log.info("Product {} có sale {}% - Giá gốc: {}, Giá sale: {}", 
-                        productId, maxDiscount.multiply(BigDecimal.valueOf(100)), originalPrice, finalPrice);
-                
-                return finalPrice;
-            }
-        }
-        
-        return originalPrice;
-    }
-
-    // tạo Order
-    @Transactional
+    // tạo Order - redis
     public OrderResponse createOrder(OrderRequest request) {
+
         // 1. Lấy thông tin user
         User user = getCurrentAuthenticatedUser();
 
-        // 2. Lấy địa chỉ của user
         Address address = addressRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
 
@@ -103,7 +100,121 @@ public class OrderService {
             throw new AppException(ErrorCode.PHONE_NUMBER_EMPTY);
         }
 
-        // 3. Tạo đơn hàng
+        // 2. Sắp xếp các VariationId để CHỐNG DEADLOCK
+        List<Integer> sortedVariationIds = request.getItems().stream()
+                .map(OrderRequest.Item::getVariationId)
+                .distinct()
+                .sorted()
+                .toList();
+
+        // 3. Chuẩn bị MultiLock cho tất cả item trong cart
+        List<RLock> locks = sortedVariationIds.stream()
+                .map(id -> redissonClient.getLock(VARIATION_LOCK_PREFIX + id))
+                .toList();
+        RLock multiLock = redissonClient.getMultiLock(locks.toArray(new RLock[0]));
+
+        boolean isLocked = false;
+        try{
+            // 4. TRY-LOCK FAIL-FAST (Đợi tối đa 2s)
+            isLocked = multiLock.tryLock(2, TimeUnit.SECONDS);
+            if(!isLocked) {
+                log.warn("User {} bị chặn do tranh chấp mua hàng.", user.getId());
+                throw new AppException(ErrorCode.SYSTEM_BUSY, "Hệ thống đang xử lý giao dịch, vui lòng thử lại sau giây lát!");
+            }
+
+            // 5. Mở Transaction db bên trong khóa
+            Order savedOrder = transactionTemplate.execute(status -> {
+                try {
+                    validateStockAndPriceWithCache(request);
+
+                    return executeOrderCreationDBLogic(
+                            user,
+                            address,
+                            request,
+                            sortedVariationIds
+                    );
+                }
+                catch (Exception e){
+                    status.setRollbackOnly();
+                    throw e;
+//                    try {
+//                        throw e;
+//                    } catch (InterruptedException ex) {
+//                        throw new RuntimeException(ex);
+//                    }
+                }
+            });
+
+            sortedVariationIds.forEach(variationCacheService::clearCache);
+            productCacheService.clearListCache();
+            clearOrderCache(user.getId());
+
+            return mapToOrderResponse(savedOrder);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+        finally {
+            // 6. Nhả khóa (Sau khi db commit)
+            if(isLocked){
+                try{
+                    multiLock.unlock();
+                } catch (Exception e){
+                    log.error("Lỗi unlock: {}", e.getMessage());
+                }
+            }
+        }
+
+    }
+
+    private void validateStockAndPriceWithCache(OrderRequest request){
+
+        List<String> keys = request.getItems().stream()
+                .map(item -> VARIATION_CACHE_PREFIX + item.getVariationId())
+                .toList();
+
+        List<String> cachedValue = redisService.multiGet(keys);
+
+        if (cachedValue == null) return;
+
+        for(int i = 0; i < request.getItems().size(); i++){
+            OrderRequest.Item requestItem = request.getItems().get(i);
+            String cachedVariation = cachedValue.get(i);
+
+            if (cachedVariation == null || NULL_VALUE.equals(cachedVariation)) {
+                continue;
+            }
+
+            try{
+                ProductVariationResponse response = objectMapper.readValue(cachedVariation, ProductVariationResponse.class);
+                if(response.getStockQuantity() < requestItem.getQuantity()){
+                    log.warn("Fail-fast: Variation {} out of stock in cache (Require: {}, Have: {})",
+                            response.getId(), requestItem.getQuantity(), response.getStockQuantity());
+                    throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+                }
+            } catch (JsonProcessingException e){
+                log.error("Json parse error");
+            }
+        }
+
+    }
+
+    private Order executeOrderCreationDBLogic(User user, Address address, OrderRequest request, List<Integer> variationIds) {
+
+        // 1. Lấy tất cả Variations trong 1 câu Query (Dữ liệu thật 100% để trừ kho)
+        List<ProductVariation> variations = productVariationRepository.findAllByIdsWithProduct(variationIds);
+        Map<Integer, ProductVariation> variationMap = variations.stream()
+                .collect(Collectors.toMap(ProductVariation::getId, v -> v));
+
+        // 2. Tận dụng Cache Sale
+        List<Integer> productIds = variations.stream()
+                .map(v -> v.getProduct().getProductId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, BigDecimal> maxDiscountMap = salesCacheService.getLastestDiscountMap(productIds);
+
         Order order = Order.builder()
                 .user(user)
                 .fullAddress(address.getStreet() + ", " + address.getWard() + ", " + address.getCity())
@@ -115,22 +226,24 @@ public class OrderService {
         List<OrderDetail> orderDetails = new ArrayList<>();
         double totalAmount = 0;
 
-        // 4. Xử lý từng item trong đơn hàng
         for (OrderRequest.Item item : request.getItems()) {
-            // Lấy ProductVariation từ database
-            ProductVariation variation = productVariationRepository.findById(item.getVariationId())
-                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIATION_NOT_FOUND));
+            ProductVariation variation = variationMap.get(item.getVariationId());
+            if (variation == null) throw new AppException(ErrorCode.PRODUCT_VARIATION_NOT_FOUND);
 
-            // Kiểm tra tồn kho
+            // Kiểm tra tồn kho an toàn
             if (variation.getStockQuantity() < item.getQuantity()) {
                 throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
             }
 
-            // Tính giá có áp dụng sale
+            // Lấy discount từ Map (O(1)) thay vì Query DB
+            BigDecimal discount = maxDiscountMap.getOrDefault(variation.getProduct().getProductId(), BigDecimal.ZERO);
             Double originalPrice = variation.getProduct().getPrice();
-            Double finalPrice = calculateFinalPrice(variation.getProduct().getProductId(), originalPrice);
+            BigDecimal discountMultiplier = BigDecimal.ONE.subtract(discount);
+            double finalPrice = originalPrice * discountMultiplier.doubleValue();
 
-            // Tạo OrderDetail
+            // Trừ tồn kho trên memory
+            variation.setStockQuantity(variation.getStockQuantity() - item.getQuantity());
+
             OrderDetail orderDetail = OrderDetail.builder()
                     .order(order)
                     .productVariation(variation)
@@ -139,34 +252,64 @@ public class OrderService {
                     .build();
             orderDetails.add(orderDetail);
 
-            // Cộng tổng tiền
             totalAmount += finalPrice * item.getQuantity();
-
-            // Trừ số lượng tồn kho
-            variation.setStockQuantity(variation.getStockQuantity() - item.getQuantity());
         }
 
-        // 5. Set thông tin cho order và lưu
         order.setOrderDetails(orderDetails);
         order.setTotalAmount(totalAmount);
 
-        Order savedOrder = orderRepository.save(order);
+//        Thread.sleep(10000);
 
-        return mapToOrderResponse(savedOrder);
+        return orderRepository.save(order);
     }
 
     // Lấy danh sách đơn hàng của user - Tối ưu với JOIN FETCH
     public List<OrderResponse> getUserOrderList() {
-        User currentUser = getCurrentAuthenticatedUser();
 
-        return orderRepository.findByUserWithDetails(currentUser).stream()
-                .map(this::mapToOrderResponse)
-                .collect(Collectors.toList());
+        User user = getCurrentAuthenticatedUser();
+        Integer userId = user.getId();
+        String cacheKey = ORDER_USER_CACHE + userId;
+
+        List<OrderResponse> cachedList = redisService.getList(cacheKey, new TypeReference<>() {});
+        if(cachedList != null){
+            return cachedList;
+        }
+
+        String lockKey = ORDER_USER_LOCK + userId;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    cachedList = redisService.getList(cacheKey, new TypeReference<>() {});
+                    if(cachedList != null){
+                        return cachedList;
+                    }
+
+                    List<OrderResponse> orders = orderRepository.findByUserWithDetails(user).stream()
+                            .map(this::mapToOrderResponse)
+                            .toList();
+
+                    redisService.set(cacheKey, orders, Duration.ofMinutes(15));
+                    return orders;
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else{
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
     }
 
-    // Hủy đơn hàng - Tối ưu với JOIN FETCH
-    @Transactional
+    // Hủy đơn hàng - redis
     public OrderResponse cancelOrder(Integer orderId) {
+
         Order order = orderRepository.findByIdWithDetails(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
@@ -178,7 +321,6 @@ public class OrderService {
             if ("VNPAY".equals(payment.getPaymentMethod())) {
                 throw new AppException(ErrorCode.CANNOT_CANCEL_PAID_ORDER);
             }
-            payment.setStatus(PaymentStatus.REFUNDED);
         }
 
         // Kiểm tra quyền: Admin có thể hủy tất cả, user thường chỉ hủy của mình
@@ -193,14 +335,60 @@ public class OrderService {
             throw new AppException(ErrorCode.CANNOT_CANCEL_ORDER);
         }
 
-        for (OrderDetail detail : order.getOrderDetails()) {
-            ProductVariation variation = detail.getProductVariation();
-            variation.setStockQuantity(variation.getStockQuantity() + detail.getQuantity());
+        // Lấy danh sách ID để tạo khóa hoàn kho
+        List<Integer> sortedVariationIds = order.getOrderDetails().stream()
+                .map(detail -> detail.getProductVariation().getId())
+                .distinct()
+                .sorted()
+                .toList();
+
+        List<RLock> locks = sortedVariationIds.stream()
+                .map(id -> redissonClient.getLock(VARIATION_LOCK_PREFIX + id))
+                .toList();
+        RLock multiLock = redissonClient.getMultiLock(locks.toArray(new RLock[0]));
+
+        boolean isLocked = false;
+        try{
+            isLocked = multiLock.tryLock(2, TimeUnit.SECONDS);
+
+            // Xử lý Hủy đơn trong Transaction DB
+            Order canceledOrder = transactionTemplate.execute(status -> {
+               if(payment != null && payment.getStatus() == PaymentStatus.COMPLETED){
+                   payment.setStatus(PaymentStatus.REFUNDED);
+               }
+
+                // Trả lại tồn kho
+                for(OrderDetail detail : order.getOrderDetails()){
+                    ProductVariation productVariation = detail.getProductVariation();
+                    productVariation.setStockQuantity(productVariation.getStockQuantity() + detail.getQuantity());
+                }
+
+//                try {
+//                    Thread.sleep(100000);
+//                } catch (InterruptedException e) {
+//                    throw new RuntimeException(e);
+//                }
+
+                order.setStatus(OrderStatus.CANCELED);
+                return orderRepository.save(order);
+            });
+
+            sortedVariationIds.forEach(variationCacheService::clearCache);
+            clearOrderCache(user.getId());
+
+            return mapToOrderResponse(canceledOrder);
+
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        } finally {
+            if(isLocked){
+                try{
+                    multiLock.unlock();
+                } catch (Exception e){}
+            }
         }
 
-        order.setStatus(OrderStatus.CANCELED);
-        Order cancelOrder = orderRepository.save(order);
-        return mapToOrderResponse(cancelOrder);
     }
 
     // Chỉnh sửa Order - Có thể cập nhật địa chỉ, số điện thoại và ghi chú
@@ -297,8 +485,10 @@ public class OrderService {
         // check nếu là COMPLETED thì chuyển Payment thành COMPLETED
         if (orderStatus == OrderStatus.COMPLETED) {
             order.getPayment().setStatus(PaymentStatus.COMPLETED);
+            clearFeedbackCache(order.getUser().getId());
         }
         Order updatedOrder = orderRepository.save(order);
+        clearOrderCache(order.getUser().getId());
 
         return mapToOrderResponse(updatedOrder);
     }
@@ -319,6 +509,26 @@ public class OrderService {
         }
 
         orderRepository.delete(order);
+
+        clearOrderCache(order.getUser().getId());
+    }
+
+    public List<Integer> getPendingFeedbackProductIds(){
+
+        Integer userId = Integer.parseInt(SecurityContextHolder.getContext().getAuthentication().getName());
+        String cacheKey = PENDING_FEEDBACK_CACHE + userId;
+
+        List<Integer> cached = redisService.getList(cacheKey, new TypeReference<>() {});
+        if(cached != null){
+            return cached;
+        }
+
+        log.info("Cache miss for pending feedback user ID {}, reading from DB...", userId);
+
+        List<Integer> ids = orderRepository.getProductIdsWaitingForReview(userId);
+        redisService.set(cacheKey, ids, Duration.ofMinutes(30));
+        return ids;
+
     }
 
     // Phân trang cho orders của user - Tối ưu cho dữ liệu lớn
@@ -339,6 +549,22 @@ public class OrderService {
         return orderRepository.findByStatusWithDetails(status).stream()
                 .map(this::mapToOrderResponse)
                 .collect(Collectors.toList());
+    }
+
+    public void clearOrderCache(Integer id){
+
+        String cacheKey = ORDER_USER_CACHE + id;
+        redisService.delete(cacheKey);
+        log.info("Cleared cache for Order User ID: {}", id);
+
+    }
+
+    public void clearFeedbackCache(Integer id){
+
+        String cacheKey = PENDING_FEEDBACK_CACHE + id;
+        redisService.delete(cacheKey);
+        log.info("Cleared cache for pending feedbacks user ID: {}", id);
+
     }
 
     public OrderResponse mapToOrderResponse(Order order) {

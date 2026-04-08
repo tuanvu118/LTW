@@ -1,6 +1,8 @@
 package com.BTL_JAVA.BTL.Service;
 
+import com.BTL_JAVA.BTL.DTO.Request.ApiResponse;
 import com.BTL_JAVA.BTL.DTO.Request.Review.ReviewRequest;
+import com.BTL_JAVA.BTL.DTO.Response.Product.CategoryResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Review.ReviewResponse;
 import com.BTL_JAVA.BTL.DTO.Response.Review.UserReviewsResponse;
 import com.BTL_JAVA.BTL.Entity.Review;
@@ -9,11 +11,14 @@ import com.BTL_JAVA.BTL.Exception.AppException;
 import com.BTL_JAVA.BTL.Exception.ErrorCode;
 import com.BTL_JAVA.BTL.Repository.ReviewRepository;
 import com.BTL_JAVA.BTL.Repository.UserRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,18 +26,26 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
-
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ReviewService {
-    final ReviewRepository reviewRepository;
-    final UserRepository userRepository;
 
+    ReviewRepository reviewRepository;
+    UserRepository userRepository;
+
+    RedissonClient redissonClient;
+    RedisService redisService;
+
+    static String REVIEW_RATING_CACHE = "review:detail:";
+    static String REVIEW_RATING_LOCK = "lock:review:rating";
+    static String NULL_VALUE = "NOT_EXIST";
 
     // tạo mới review
     @Transactional
@@ -56,6 +69,11 @@ public class ReviewService {
                 .build();
 
         Review savedReview = reviewRepository.save(review);
+
+        if(request.getRating() != null){
+            clearReviewRatingCache(request.getRating());
+        }
+
         return mapToResponse(savedReview);
     }
 
@@ -135,6 +153,13 @@ public class ReviewService {
                 .reviews(reviewDetails)
                 .build();
     }
+
+    private void clearReviewRatingCache(Integer rating){
+
+        redisService.delete(REVIEW_RATING_CACHE + rating);
+        log.info("Cleared cache for rating: {}", rating);
+
+    }
     
     // Phân trang cho tất cả reviews - Tối ưu cho dữ liệu lớn
     public Page<ReviewResponse> getAllReviewsPaginated(int page, int size) {
@@ -164,9 +189,71 @@ public class ReviewService {
         if (rating < 1 || rating > 5) {
             throw new AppException(ErrorCode.INVALID_KEY);
         }
-        return reviewRepository.findByRatingWithUser(rating).stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+
+        String cacheKey = REVIEW_RATING_CACHE + rating;
+
+        // Validate category không tồn tại
+        String rawValue = redisService.getString(cacheKey);
+        if(NULL_VALUE.equals(rawValue)){
+//            log.info("Cache hit but no value: {}", rating);
+            return List.of();
+        }
+
+        // Lấy dữ liệu từ cache
+        List<ReviewResponse> cachedValue = redisService.getList(cacheKey, new TypeReference<>() {});
+        if(cachedValue != null){
+            log.info("Cache hit for rating: {}", rating);
+            return cachedValue;
+        }
+
+        // Cache miss
+        String lockKey = REVIEW_RATING_LOCK + rating;
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try{
+            if(lock.tryLock(5, TimeUnit.SECONDS)){
+                try{
+                    // Double check
+                    rawValue = redisService.getString(cacheKey);
+                    if(NULL_VALUE.equals(rawValue)){
+                        log.info("Cache hit but no value: {}", rating);
+                        return List.of();
+                    }
+
+                    cachedValue = redisService.getList(cacheKey, new TypeReference<>() {});
+                    if(cachedValue != null){
+                        log.info("Cache hit for rating: {}", rating);
+                        return cachedValue;
+                    }
+
+                    log.info("Cache miss for rating {}, fetching from DB...", rating);
+
+                    List<Review> reviews = reviewRepository.findByRatingWithUser(rating);
+
+                    if(reviews.isEmpty()){
+                        redisService.set(cacheKey, NULL_VALUE, Duration.ofMinutes(1));
+                        return List.of();
+                    }
+
+                    List<ReviewResponse> responseList = reviews.stream()
+                            .map(this::mapToResponse)
+                            .toList();
+                    redisService.set(cacheKey, responseList, Duration.ofMinutes(30));
+
+                    return responseList;
+                } finally {
+                    if(lock.isHeldByCurrentThread()){
+                        lock.unlock();
+                    }
+                }
+            } else {
+                throw new AppException(ErrorCode.SYSTEM_BUSY);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+            throw new AppException(ErrorCode.SYSTEM_ERROR);
+        }
+
     }
     
     // Lấy reviews có rating >= giá trị cho trước

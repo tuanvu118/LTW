@@ -38,6 +38,8 @@ public enum ErrorCode {
     PRODUCT_EXISTED(1024, "Product already exists", HttpStatus.BAD_REQUEST),
     VARIATION_EXISTED(1025, "Variation already exists", HttpStatus.BAD_REQUEST),
     CANNOT_CANCEL_PAID_ORDER(1026, "Cannot cancel order that has been paid. Please request refund.", HttpStatus.BAD_REQUEST),
+    INVALID_RESET_TOKEN(1027, "Reset token is invalid.", HttpStatus.BAD_REQUEST),
+    EXPIRED_RESET_TOKEN(1028, "Reset token has expired.", HttpStatus.BAD_REQUEST),
 
     // ===== Sales (2xxx) =====
     SALE_NOT_EXISTED(2001, "Sale khong ton tai", HttpStatus.NOT_FOUND),
@@ -67,10 +69,14 @@ public enum ErrorCode {
     CANNOT_REMOVE_DEFAULT_ADDRESS(6007, "Khong cap nhat duoc do khong co DefaultAddress.", HttpStatus.BAD_REQUEST),
 
     // ===== PAYMENT (7xxx) =====
-    PAYMENT_NOT_FOUND(7001, "Khong thay thong tin paymen", HttpStatus.NOT_FOUND),
-
+    PAYMENT_NOT_FOUND(7001, "Khong thay thong tin payment", HttpStatus.NOT_FOUND),
+    INVALID_PAYMENT_METHOD(7002, "Phương thức thanh toán không hợp lệ", HttpStatus.BAD_REQUEST),
     // ===== Misc (9xxx) =====
-    UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR);
+    SYSTEM_BUSY(9001, "Hệ thống đang bận, vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS),
+    SYSTEM_ERROR(9002, "Lỗi gián đoạn luồng hệ thống.", HttpStatus.INTERNAL_SERVER_ERROR),
+    UNCATEGORIED_EXCEPTION(9999, "Khong xac dinh", HttpStatus.INTERNAL_SERVER_ERROR),
+    CACHE_WRITE_ERROR(9003, "Xảy ra lỗi khi ghi cache", HttpStatus.BAD_REQUEST),
+    ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
         this.code = code;

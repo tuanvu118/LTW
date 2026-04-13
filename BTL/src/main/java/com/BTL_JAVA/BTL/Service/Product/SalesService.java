@@ -196,9 +196,12 @@ public class SalesService {
 
             Sales saved = salesRepository.save(sale);
 
+            clearListCache();
+
             return ApiResponse.<SalesResponse>builder()
                     .result(toResponse(saved, isActive))
                     .build();
+
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
@@ -259,6 +262,7 @@ public class SalesService {
             }
 
             clearCache(affectedProductIds);
+            clearListCache();
 
             return ApiResponse.<SalesResponse>builder()
                     .result(toResponse(saved, isActive))
@@ -287,6 +291,7 @@ public class SalesService {
             salesRepository.delete(sale);
 
             clearCache(affectedIds);
+            clearListCache();
 
             return ApiResponse.<Void>builder()
                     .result(null)
@@ -380,6 +385,12 @@ public class SalesService {
                 .map(id -> DISCOUNT_CACHE_PREFIX + id)
                 .toList();
         keys.forEach(redisService::delete);
+
+    }
+
+    public void clearListCache(){
+
+        redisService.delete(SALE_LIST_CACHE);
 
     }
 
